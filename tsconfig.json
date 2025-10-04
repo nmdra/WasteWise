@@ -14,5 +14,5 @@
     "app/(tabs)/_layout.jsx",
     "app/(tabs)/Home.jsx",
     "nativewind-env.d.ts"
-, "app/_layout.jsx", "app/modal.jsx", "components/external-link.jsx", "components/haptic-tab.jsx", "components/hello-wave.jsx", "components/parallax-scroll-view.jsx", "components/themed-text.jsx", "components/themed-view.jsx", "constants/theme.js", "hooks/use-color-scheme.ts", "hooks/use-color-scheme.web.ts", "hooks/use-theme-color.ts"  ]
+, "app/_layout.jsx", "app/modal.jsx", "components/external-link.jsx", "components/haptic-tab.jsx", "components/hello-wave.jsx", "components/parallax-scroll-view.jsx", "components/themed-text.jsx", "components/themed-view.jsx", "constants/theme.js", "hooks/use-color-scheme.ts", "hooks/use-color-scheme.web.ts", "hooks/use-theme-color.ts", "app/(tabs)/explore.jsx", "app/(tabs)/index.jsx"  ]
 }
