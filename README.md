@@ -1,156 +1,311 @@
 # WasteWise 🌱♻️
 
-A Smart Waste Management app built with React Native and Expo to help users track waste collection dates, manage waste types, and receive timely reminders.
+A Smart Waste Management application with **role-based authentication** built with React Native, Expo, and Firebase. The app provides different experiences for customers (waste generators) and cleaners (waste collectors) with real-time tracking, scheduling, and route management.
 
-## Features
+## ✨ Features
 
-- 📊 **Dashboard**: Overview of upcoming waste collections and waste types
-- 📅 **Calendar View**: Interactive calendar to schedule and view collection dates
-- 🔔 **Notifications**: Get reminders before collection days
-- 🗑️ **Waste Type Management**: Track different waste types (Organic, Plastic, Glass, Paper, Metal, Electronic)
-- ⚙️ **Settings**: Customize notifications, reminder times, and manage data
-- 💾 **Local Storage**: All data stored locally using AsyncStorage
+### � **Authentication System**
+- Email/Password signup and login
+- Google OAuth integration
+- Firebase Authentication & Firestore
+- Secure token management with AsyncStorage
+- "Fill later" option for profile fields
 
-## Tech Stack
+### � **Role-Based Navigation**
+- **Customer Role** - Green themed interface for waste generators
+- **Cleaner Role** - Orange themed interface for waste collectors
+- Automatic role detection and routing
+- Persistent login across app restarts
 
-- **React Native** - Cross-platform mobile development
-- **Expo** - Development framework and tools
-- **React Navigation** - Navigation between screens
-- **NativeWind** - Tailwind CSS for React Native styling
-- **expo-notifications** - Push notifications and reminders
-- **AsyncStorage** - Local data persistence
-- **react-native-calendars** - Calendar component
+### � **Customer Features**
+- Next pickup schedule with date/time
+- Track waste collection truck in real-time
+- Schedule pickup requests
+- Report issues with collections
+- Payment management
+- Recent pickups activity feed
+- Location management
 
-## Project Structure
+### � **Cleaner Features**
+- Daily route overview and progress tracking
+- Visual progress bar (completed vs remaining stops)
+- Next stops list with addresses
+- Navigate to pickup locations
+- QR code scanning for verification
+- Shift information display
+- Route optimization
+
+### 🎨 **User Interface**
+- Beautiful card-based layouts
+- Smooth animations and transitions
+- Intuitive tab navigation
+- Responsive design
+- Profile management
+- Settings and preferences
+
+## 🚀 Tech Stack
+
+- **Framework:** React Native with Expo Router
+- **Authentication:** Firebase Auth (Email/Password, Google OAuth)
+- **Database:** Cloud Firestore
+- **Local Storage:** AsyncStorage
+- **Navigation:** Expo Router (file-based routing)
+- **Styling:** React Native StyleSheet
+- **UI Components:** Custom components
+
+## 📂 Project Structure
 
 ```
 WasteWise/
-├── App.js                  # Main app with navigation setup
-├── app.json               # Expo configuration
-├── package.json           # Dependencies
-├── babel.config.js        # Babel configuration
-├── tailwind.config.js     # Tailwind CSS configuration
-├── screens/
-│   ├── DashboardScreen.js # Home dashboard
-│   ├── CalendarScreen.js  # Calendar view
-│   └── SettingsScreen.js  # Settings and preferences
-├── utils/
-│   ├── storage.js         # AsyncStorage utilities
-│   └── notifications.js   # Notification utilities
-└── assets/                # Images and icons
+├── app/
+│   ├── _layout.jsx              # Root navigation
+│   ├── splash.jsx               # Entry with role detection
+│   ├── onboarding.jsx           # 3-page onboarding
+│   ├── login.jsx                # Login with role routing
+│   ├── signup.jsx               # Signup (customer by default)
+│   ├── profile.jsx              # Profile & settings
+│   │
+│   └── (tabs)/
+│       ├── customer/
+│       │   ├── _layout.jsx      # Customer tabs
+│       │   ├── home.jsx         # Customer dashboard
+│       │   ├── map.jsx          # Track truck
+│       │   └── locations.jsx    # Address management
+│       │
+│       └── cleaner/
+│           ├── _layout.jsx      # Cleaner tabs
+│           ├── home.jsx         # Cleaner dashboard
+│           ├── map.jsx          # Route navigation
+│           └── stops.jsx        # Pickup stops list
+│
+├── components/
+│   └── app-header.jsx           # Shared header component
+│
+├── config/
+│   └── firebase.js              # Firebase configuration
+│
+├── services/
+│   └── auth.js                  # Authentication service
+│
+├── .env                         # Firebase credentials
+├── ROLE_BASED_SYSTEM.md        # System documentation
+├── TESTING_GUIDE.md            # Test scenarios
+├── IMPLEMENTATION_SUMMARY.md   # Implementation details
+└── FLOW_DIAGRAM.md             # Visual flow charts
 ```
 
-## Installation
+## 🔥 Firebase Structure
+
+### Authentication
+- Email/Password provider
+- Google OAuth provider
+
+### Firestore Database
+Collection: `users`
+
+```javascript
+{
+  uid: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+  displayName: string,
+  phoneNumber: string,
+  address: string,
+  location: null,
+  role: "customer" | "cleaner",  // Role determines UI
+  profileImage: string,
+  isProfileComplete: boolean,
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+```
+
+## 🛠️ Installation
 
 ### Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v20 or higher recommended)
 - npm or yarn
 - Expo CLI: `npm install -g expo-cli`
-- Expo Go app on your mobile device (for testing)
+- Expo Go app on your mobile device
+- Firebase project with Auth and Firestore enabled
 
 ### Setup
 
-1. Clone the repository:
+1. **Clone the repository:**
 ```bash
 git clone https://github.com/nmdra/WasteWise.git
 cd WasteWise
 ```
 
-2. Install dependencies:
+2. **Install dependencies:**
 ```bash
 npm install
 ```
 
-3. Start the development server:
+3. **Configure Firebase:**
+
+Create a `.env` file in the root directory:
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY=your_api_key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
+```
+
+4. **Enable Firebase Services:**
+   - Go to Firebase Console
+   - Enable Email/Password authentication
+   - Enable Google authentication
+   - Create Firestore database
+   - Set Firestore security rules
+
+5. **Start the development server:**
 ```bash
 npm start
 # or
-expo start
+npx expo start
 ```
 
-4. Run on your device:
+6. **Run on your device:**
    - Scan the QR code with Expo Go app (Android) or Camera app (iOS)
    - Or press `a` for Android emulator or `i` for iOS simulator
 
-## Usage
+## 📱 Usage
 
-### Dashboard
-- View your next upcoming collection
-- See all waste types at a glance
-- Quick access to upcoming collections
-- Quick action buttons to navigate to Calendar and Settings
+### First Time User Flow
+1. **Splash Screen** - Animated logo (1.5s)
+2. **Onboarding** - 3 screens explaining features
+3. **Login/Signup** - Create account or sign in
+4. **Home Screen** - Role-based dashboard
 
-### Calendar
-- Tap on any date to add a collection
-- Select the waste type for collection
-- View all scheduled collections
-- Delete collections you no longer need
-- Visual markers on dates with scheduled collections
-
-### Settings
-- Enable/disable notifications
-- Set reminder time (default notification time)
-- Configure reminder days before collection
-- Reset waste types to defaults
-- Clear all data
-- View app information
-
-## Waste Types
-
-The app comes with 6 default waste types:
-- 🌱 **Organic** - Food waste, garden waste
-- ♻️ **Plastic** - Plastic bottles, containers, packaging
-- 🫙 **Glass** - Glass bottles, jars
-- 📄 **Paper** - Newspapers, cardboard, paper
-- 🔧 **Metal** - Aluminum cans, metal containers
-- 💻 **Electronic** - E-waste, batteries, electronics
-
-## Notifications
-
-- Automatic reminders before collection days
-- Customizable reminder time (06:00, 08:00, 10:00, 12:00, 18:00)
-- Set reminder days before (0-3 days)
-- Android: Uses notification channels for better control
-- iOS: Requires notification permissions
-
-## Data Storage
-
-All data is stored locally on your device using AsyncStorage:
-- Collection dates and schedules
-- Waste types configuration
-- User settings and preferences
-- No internet connection required
-
-## Development
-
-### Running Tests
-```bash
-npm test
+### Customer Journey
+```
+Login → Customer Home → Track/Schedule/Report/Pay
+      → Map View → See truck location
+      → Locations → Manage pickup addresses
 ```
 
-### Building for Production
-
-**Android:**
-```bash
-expo build:android
+### Cleaner Journey
+```
+Login → Cleaner Home → View route & progress
+      → Map View → Navigate to stops
+      → Stops List → Manage pickup stops
 ```
 
-**iOS:**
+### Testing Different Roles
+
+**As Customer (Default):**
+- Sign up normally - role is set to "customer" automatically
+
+**As Cleaner (Admin Change):**
+1. Sign up as customer
+2. Go to Firebase Console → Firestore → `users` collection
+3. Find your user document
+4. Change `role: "customer"` to `role: "cleaner"`
+5. Logout from app and login again
+6. You'll see the Cleaner interface!
+
+## 🎨 Design System
+
+### Customer Theme
+- **Primary:** #16A34A (Green)
+- **Accent:** #DCFCE7 (Light Green)
+- **Icon:** 👤
+- **Focus:** Waste collection tracking
+
+### Cleaner Theme
+- **Primary:** #F59E0B (Orange/Amber)
+- **Accent:** #FEF3C7 (Light Orange)
+- **Icon:** 🚛
+- **Focus:** Route management
+
+### Shared Colors
+- **Background:** #F8FAFC
+- **Text:** #0B1220
+- **Border:** #E2E8F0
+- **Error:** #DC2626
+
+## 📖 Documentation
+
+- **[ROLE_BASED_SYSTEM.md](ROLE_BASED_SYSTEM.md)** - Complete system architecture
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Test scenarios and debugging
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - What's built
+- **[FLOW_DIAGRAM.md](FLOW_DIAGRAM.md)** - Visual flow charts
+
+## � Security Features
+
+- ✅ Firebase Authentication tokens
+- ✅ Secure password requirements (min 6 chars)
+- ✅ Password confirmation on signup
+- ✅ Token refresh handled by Firebase
+- ✅ Logout clears all local data
+- ✅ Role-based access control
+
+## 🚧 Coming Soon
+
+### Phase 2: Map Integration
+- Real-time truck tracking with GPS
+- Route navigation for cleaners
+- Google Maps / Mapbox integration
+
+### Phase 3: QR Code Scanning
+- Pickup verification
+- Location check-in
+- Camera permissions
+
+### Phase 4: Notifications
+- Pickup reminders
+- Route updates
+- Push notifications
+
+### Phase 5: Advanced Features
+- Payment integration
+- Issue reporting with photos
+- Schedule management
+- Route optimization
+
+## 🧪 Testing
+
+See **[TESTING_GUIDE.md](TESTING_GUIDE.md)** for:
+- 10 comprehensive test scenarios
+- Debug commands
+- Common issues & fixes
+- Test results template
+
+Quick test:
 ```bash
-expo build:ios
+# Run the app
+npm start
+
+# Test as customer
+1. Sign up with email
+2. Should see green customer home
+
+# Test as cleaner
+1. Change role in Firebase Console
+2. Logout and login
+3. Should see orange cleaner home
 ```
 
-### Creating Standalone Apps
-```bash
-# Android APK
-eas build -p android --profile preview
+## 🐛 Troubleshooting
 
-# iOS IPA
-eas build -p ios --profile preview
+### User always goes to customer home
+**Fix:** Check if role is properly stored in Firestore and AsyncStorage
+
+### Logout doesn't work
+**Fix:** Verify AsyncStorage.multiRemove includes all keys:
+```javascript
+['userToken', 'userId', 'userEmail', 'userFirstName', 'userRole', 'hasSeenOnboarding']
 ```
 
-## Contributing
+### Can't navigate to profile
+**Fix:** Make sure profile route is in `app/_layout.jsx`
+
+## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -160,18 +315,18 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - Built with [Expo](https://expo.dev/)
+- [Firebase](https://firebase.google.com/) for authentication and database
+- [Expo Router](https://expo.github.io/router/) for navigation
 - Icons from Unicode Emoji
-- Calendar component by [react-native-calendars](https://github.com/wix/react-native-calendars)
-- Styled with [NativeWind](https://www.nativewind.dev/)
 
-## Contact
+## 📧 Contact
 
 NIMENDRA - [GitHub](https://github.com/nmdra)
 
@@ -179,4 +334,4 @@ Project Link: [https://github.com/nmdra/WasteWise](https://github.com/nmdra/Wast
 
 ---
 
-Made with ♻️ for a cleaner tomorrow
+Made with 💚 for a cleaner tomorrow 🌍
