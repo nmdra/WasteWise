@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { logOut } from '../services/auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -47,6 +48,9 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Call Firebase logout to end session
+              await logOut();
+
               // Clear all AsyncStorage data
               await AsyncStorage.multiRemove([
                 'userToken',
@@ -54,8 +58,8 @@ export default function ProfileScreen() {
                 'userEmail',
                 'userFirstName',
                 'userRole',
-                'hasSeenOnboarding',
               ]);
+
               router.replace('/login');
             } catch (error) {
               console.error('Error logging out:', error);

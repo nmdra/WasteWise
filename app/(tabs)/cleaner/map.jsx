@@ -1,15 +1,42 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppHeader from '../../../components/app-header';
+import { Colors } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
+import MapboxView from '../../../components/cleaner/MapboxView';
 
 export default function CleanerMap() {
+  const [mapData, setMapData] = useState(null);
+  const [userName, setUserName] = useState('Cleaner');
+
+  useEffect(() => {
+    MockCleaner.getMapData().then(setMapData);
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    try {
+      const firstName = await AsyncStorage.getItem('userFirstName');
+      if (firstName) {
+        setUserName(firstName);
+      }
+    } catch (error) {
+      console.error('Error loading cleaner name:', error);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <AppHeader userName="Cleaner" userRole="cleaner" />
-      <View style={styles.content}>
-        <Text style={styles.title}>🗺️ Route Map</Text>
-        <Text style={styles.subtitle}>Navigate your daily route</Text>
-        <Text style={styles.coming}>Coming Soon</Text>
+      <AppHeader userName={userName} userRole="cleaner" />
+      <View style={styles.mapWrap}>
+        {!mapData ? (
+          <View style={styles.loader}>
+            <ActivityIndicator color={Colors.role.cleaner} size="large" />
+          </View>
+        ) : (
+          <MapboxView center={mapData.current} stops={mapData.stops} polyline={mapData.polyline} />
+        )}
       </View>
     </View>
   );
@@ -18,29 +45,20 @@ export default function CleanerMap() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Colors.bg.page,
   },
-  content: {
+  mapWrap: {
+    flex: 1,
+    margin: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.line,
+    backgroundColor: Colors.bg.card,
+  },
+  loader: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#0B1220',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  coming: {
-    marginTop: 24,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#F59E0B',
   },
 });

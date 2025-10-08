@@ -1,15 +1,84 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import AppHeader from '../../../components/app-header';
+import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
+import StatusChip from '../../../components/cleaner/StatusChip';
+
+const FILTERS = ['all', 'pending', 'completed'];
 
 export default function CleanerStops() {
+  const router = useRouter();
+  const [stops, setStops] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [userName, setUserName] = useState('Cleaner');
+
+  useEffect(() => {
+    MockCleaner.getStopsList().then(setStops);
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    try {
+      const firstName = await AsyncStorage.getItem('userFirstName');
+      if (firstName) {
+        setUserName(firstName);
+      }
+    } catch (error) {
+      console.error('Error loading cleaner name:', error);
+    }
+  };
+
+  const filteredStops = stops.filter((item) =>
+    filter === 'all' ? true : item.status === filter,
+  );
+
   return (
     <View style={styles.container}>
-      <AppHeader userName="Cleaner" userRole="cleaner" />
+      <AppHeader userName={userName} userRole="cleaner" />
       <View style={styles.content}>
-        <Text style={styles.title}>📋 Stops List</Text>
-        <Text style={styles.subtitle}>View and manage all pickup stops</Text>
-        <Text style={styles.coming}>Coming Soon</Text>
+        <View style={styles.filterRow}>
+          {FILTERS.map((item) => {
+            const active = item === filter;
+            return (
+              <TouchableOpacity
+                key={item}
+                onPress={() => setFilter(item)}
+                style={[styles.filterBtn, active && styles.filterBtnActive]}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <FlatList
+          data={filteredStops}
+          keyExtractor={(item) => item.stopId}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
+          contentContainerStyle={{ paddingBottom: Spacing.xxl }}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.stopCard}
+              activeOpacity={0.85}
+              onPress={() =>
+                router.push({ pathname: '/cleaner/stop-details', params: { stopId: item.stopId } })
+              }
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.stopTitle}>{item.address}</Text>
+                <Text style={styles.stopMeta}>
+                  {item.time} • Bin {item.binId}
+                </Text>
+              </View>
+              <StatusChip status={item.status} />
+            </TouchableOpacity>
+          )}
+        />
       </View>
     </View>
   );
@@ -18,29 +87,56 @@ export default function CleanerStops() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Colors.bg.page,
   },
   content: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
   },
-  title: {
-    fontSize: 32,
+  filterRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  filterBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.btn,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    backgroundColor: Colors.bg.card,
+  },
+  filterBtnActive: {
+    backgroundColor: '#FEF3C7',
+    borderColor: Colors.role.cleaner,
+  },
+  filterText: {
+    color: Colors.text.primary,
     fontWeight: '700',
-    color: '#0B1220',
-    marginBottom: 8,
+    textTransform: 'capitalize',
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#64748B',
-    textAlign: 'center',
+  filterTextActive: {
+    color: Colors.role.cleaner,
   },
-  coming: {
-    marginTop: 24,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#F59E0B',
+  stopCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.md,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    gap: Spacing.md,
+  },
+  stopTitle: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    fontWeight: '700',
+  },
+  stopMeta: {
+    color: Colors.text.secondary,
+    fontSize: FontSizes.small,
+    marginTop: Spacing.xs,
   },
 });

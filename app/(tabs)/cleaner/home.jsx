@@ -1,461 +1,265 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import AppHeader from '../../../components/app-header';
+import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
+import ActionBar from '../../../components/cleaner/ActionBar';
 
 export default function CleanerHome() {
   const router = useRouter();
-  const [userData, setUserData] = useState(null);
-  const [routeStats, setRouteStats] = useState({
-    totalStops: 42,
-    completed: 18,
-    remaining: 24,
-  });
+  const [routeOverview, setRouteOverview] = useState(null);
+  const [userInfo, setUserInfo] = useState({ name: '', role: 'cleaner' });
 
   useEffect(() => {
-    loadUserData();
+    MockCleaner.getRouteOverview().then(setRouteOverview);
+    loadUserInfo();
   }, []);
 
-  const loadUserData = async () => {
+  const loadUserInfo = async () => {
     try {
-      const userEmail = await AsyncStorage.getItem('userEmail');
-      const userId = await AsyncStorage.getItem('userId');
       const firstName = await AsyncStorage.getItem('userFirstName');
-      const role = await AsyncStorage.getItem('userRole');
-
-      setUserData({
-        email: userEmail,
-        id: userId,
-        firstName: firstName || 'Cleaner',
-        role: role,
+      setUserInfo({
+        name: firstName || 'Cleaner',
+        role: 'cleaner',
       });
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error('Error loading cleaner info:', error);
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Clear all AsyncStorage data
-              await AsyncStorage.multiRemove([
-                'userToken',
-                'userId',
-                'userEmail',
-                'userFirstName',
-                'userRole',
-                'hasSeenOnboarding',
-              ]);
-              router.replace('/login');
-            } catch (error) {
-              console.error('Error logging out:', error);
-              Alert.alert('Error', 'Failed to logout');
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  };
+  if (!routeOverview) {
+    return <View style={{ flex: 1, backgroundColor: Colors.bg.page }} />;
+  }
 
-  const progressPercentage = Math.round(
-    (routeStats.completed / routeStats.totalStops) * 100
+  const progressPct = Math.round(
+    (routeOverview.completed / routeOverview.totalStops) * 100,
   );
 
   return (
     <View style={styles.container}>
-      <AppHeader userName={userData?.firstName} userRole="cleaner" />
-      
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Welcome Section */}
-        <View style={styles.welcomeCard}>
-          <Text style={styles.greeting}>Today's Route 🚛</Text>
-          <Text style={styles.subtitle}>Keep up the great work, {userData?.firstName}!</Text>
+      <AppHeader userName={userInfo.name} userRole={userInfo.role} />
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: Spacing.xxl }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.heroCard}>
+          <Text style={styles.heroGreeting}>Today’s Route 🚛</Text>
+          <Text style={styles.heroSubtitle}>
+            Zone {routeOverview.zone} • {routeOverview.totalStops} stops scheduled
+          </Text>
         </View>
 
-        {/* Route Progress Card */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>📍 Route Progress</Text>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>Active</Text>
-            </View>
-          </View>
-          
+          <Text style={styles.cardTitle}>Route Progress</Text>
+          <Text style={styles.cardSubtitle}>
+            Route {routeOverview.routeId} • {routeOverview.date}
+          </Text>
+
           <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <Text style={styles.statNumber}>{routeStats.totalStops}</Text>
-              <Text style={styles.statLabel}>Total Stops</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={[styles.statNumber, styles.statGreen]}>
-                {routeStats.completed}
-              </Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={[styles.statNumber, styles.statOrange]}>
-                {routeStats.remaining}
-              </Text>
-              <Text style={styles.statLabel}>Remaining</Text>
-            </View>
+            <StatBlock label="Completed" value={routeOverview.completed} tint={Colors.state.success} />
+            <StatBlock label="Remaining" value={routeOverview.remaining} tint={Colors.state.warning} />
+            <StatBlock label="Total" value={routeOverview.totalStops} tint={Colors.text.primary} />
           </View>
 
-          {/* Progress Bar */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
-            </View>
-            <Text style={styles.progressText}>{progressPercentage}% Complete</Text>
+          <View style={styles.progressWrap}>
+            <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
           </View>
+          <Text style={styles.progressText}>{progressPct}% complete</Text>
 
-          <TouchableOpacity style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnText}>📍 View Full Route</Text>
-          </TouchableOpacity>
+          <ActionBar
+            items={[
+              { label: 'Navigate', kind: 'primary', onPress: () => router.push('/(tabs)/cleaner/map') },
+              { label: 'Scan QR', onPress: () => router.push('/cleaner/qr') },
+              { label: 'Checklist', onPress: () => router.push('/cleaner/checklist') },
+            ]}
+          />
         </View>
 
-        {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          
-          <View style={styles.actionsGrid}>
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionIcon}>📍</Text>
-              <Text style={styles.actionTitle}>Navigate</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionIcon}>📸</Text>
-              <Text style={styles.actionTitle}>Scan QR</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionIcon}>⚠️</Text>
-              <Text style={styles.actionTitle}>Report</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionCard}>
-              <Text style={styles.actionIcon}>📋</Text>
-              <Text style={styles.actionTitle}>Checklist</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.sectionTitle}>Next stops</Text>
+          {routeOverview.next.map((stop) => (
+            <View key={stop.stopId} style={styles.stopCard}>
+              <View style={styles.stopBadge}>
+                <Text style={styles.stopBadgeText}>{stop.stopId.replace('s_', '#')}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.stopLabel}>{stop.label}</Text>
+                <Text style={styles.stopMeta}>
+                  {stop.distKm} km • {stop.priority}
+                </Text>
+              </View>
+              <Text style={styles.stopNavigate}>→</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Next Stops */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Next Stops</Text>
-          
-          <View style={styles.stopCard}>
-            <View style={styles.stopNumber}>
-              <Text style={styles.stopNumberText}>19</Text>
-            </View>
-            <View style={styles.stopContent}>
-              <Text style={styles.stopAddress}>123 Main Street</Text>
-              <Text style={styles.stopDetails}>Colombo 07 • Residential</Text>
-            </View>
-            <TouchableOpacity style={styles.navigateBtn}>
-              <Text style={styles.navigateText}>→</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.stopCard}>
-            <View style={styles.stopNumber}>
-              <Text style={styles.stopNumberText}>20</Text>
-            </View>
-            <View style={styles.stopContent}>
-              <Text style={styles.stopAddress}>456 Park Avenue</Text>
-              <Text style={styles.stopDetails}>Colombo 05 • Commercial</Text>
-            </View>
-            <TouchableOpacity style={styles.navigateBtn}>
-              <Text style={styles.navigateText}>→</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.stopCard}>
-            <View style={styles.stopNumber}>
-              <Text style={styles.stopNumberText}>21</Text>
-            </View>
-            <View style={styles.stopContent}>
-              <Text style={styles.stopAddress}>789 Green Road</Text>
-              <Text style={styles.stopDetails}>Colombo 03 • Residential</Text>
-            </View>
-            <TouchableOpacity style={styles.navigateBtn}>
-              <Text style={styles.navigateText}>→</Text>
-            </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Shift details</Text>
+          <View style={styles.shiftCard}>
+            <Text style={styles.shiftTime}>06:30 - 14:30</Text>
+            <Text style={styles.shiftNote}>Break 12:00 - 12:30</Text>
           </View>
         </View>
-
-        {/* Shift Info */}
-        <View style={styles.shiftCard}>
-          <Text style={styles.shiftTitle}>⏰ Today's Shift</Text>
-          <Text style={styles.shiftTime}>6:30 AM - 2:30 PM</Text>
-          <Text style={styles.shiftBreak}>Break: 12:00 PM - 12:30 PM</Text>
-        </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>🚪 Logout</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
 }
 
+function StatBlock({ label, value, tint }) {
+  return (
+    <View style={statStyles.wrap}>
+      <Text style={[statStyles.value, { color: tint }]}>{value}</Text>
+      <Text style={statStyles.label}>{label}</Text>
+    </View>
+  );
+}
+
+const statStyles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  value: {
+    fontSize: FontSizes.h2,
+    fontWeight: '700',
+  },
+  label: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    marginTop: Spacing.xs,
+  },
+});
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: Colors.bg.page,
   },
-  content: {
+  scroll: {
     flex: 1,
   },
-  welcomeCard: {
-    padding: 24,
-    backgroundColor: 'white',
+  heroCard: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
+    backgroundColor: Colors.bg.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: Colors.line,
   },
-  greeting: {
-    fontSize: 28,
+  heroGreeting: {
+    fontSize: FontSizes.h1,
     fontWeight: '700',
-    color: '#0B1220',
+    color: Colors.text.primary,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#64748B',
-    marginTop: 4,
+  heroSubtitle: {
+    marginTop: Spacing.xs,
+    color: Colors.text.secondary,
+    fontSize: FontSizes.body,
   },
   card: {
-    margin: 16,
-    padding: 20,
-    backgroundColor: 'white',
-    borderRadius: 16,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    borderColor: Colors.line,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: FontSizes.h3,
     fontWeight: '700',
-    color: '#0B1220',
+    color: Colors.text.primary,
   },
-  statusBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: '#F59E0B',
-    fontSize: 12,
-    fontWeight: '600',
+  cardSubtitle: {
+    marginTop: Spacing.xs,
+    color: Colors.text.secondary,
   },
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    marginTop: Spacing.lg,
   },
-  statBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0B1220',
-  },
-  statGreen: {
-    color: '#16A34A',
-  },
-  statOrange: {
-    color: '#F59E0B',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  progressContainer: {
-    marginBottom: 16,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
+  progressWrap: {
+    height: 10,
+    borderRadius: Radii.small,
+    backgroundColor: Colors.bg.light,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginVertical: Spacing.lg,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#16A34A',
-    borderRadius: 4,
+    backgroundColor: Colors.role.cleaner,
   },
   progressText: {
-    fontSize: 14,
-    color: '#64748B',
     textAlign: 'center',
+    color: Colors.text.secondary,
     fontWeight: '600',
-  },
-  primaryBtn: {
-    backgroundColor: '#F59E0B',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  primaryBtnText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
+    marginBottom: Spacing.md,
   },
   section: {
-    padding: 16,
+    marginTop: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: FontSizes.h3,
     fontWeight: '700',
-    color: '#0B1220',
-    marginBottom: 12,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    width: '47%',
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  actionIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
+    color: Colors.text.primary,
+    marginBottom: Spacing.md,
   },
   stopCard: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
     alignItems: 'center',
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.md,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    marginBottom: Spacing.sm,
   },
-  stopNumber: {
+  stopBadge: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
-  stopNumberText: {
-    fontSize: 16,
+  stopBadgeText: {
+    color: Colors.role.cleaner,
     fontWeight: '700',
-    color: '#F59E0B',
   },
-  stopContent: {
-    flex: 1,
-  },
-  stopAddress: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0B1220',
-  },
-  stopDetails: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  navigateBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F59E0B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navigateText: {
-    color: 'white',
-    fontSize: 18,
+  stopLabel: {
     fontWeight: '700',
+    color: Colors.text.primary,
+    fontSize: FontSizes.body,
+  },
+  stopMeta: {
+    marginTop: Spacing.xs,
+    color: Colors.text.secondary,
+    fontSize: FontSizes.small,
+  },
+  stopNavigate: {
+    color: Colors.role.cleaner,
+    fontWeight: '700',
+    fontSize: FontSizes.h3,
   },
   shiftCard: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    padding: 20,
-    backgroundColor: 'white',
-    borderRadius: 16,
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-  },
-  shiftTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0B1220',
-    marginBottom: 8,
+    borderColor: Colors.line,
+    padding: Spacing.lg,
   },
   shiftTime: {
-    fontSize: 20,
+    fontSize: FontSizes.h2,
     fontWeight: '700',
-    color: '#16A34A',
-    marginBottom: 4,
+    color: Colors.role.cleaner,
   },
-  shiftBreak: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  logoutBtn: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#DC2626',
+  shiftNote: {
+    marginTop: Spacing.xs,
+    color: Colors.text.secondary,
   },
 });

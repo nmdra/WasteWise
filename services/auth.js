@@ -24,7 +24,7 @@ export const createUserProfile = async (userId, userData) => {
       phoneNumber: userData.phoneNumber || '',
       address: userData.address || '',
       location: userData.location || null,
-      role: 'customer', // Always set as customer
+      role: userData.role || 'customer',
       profileImage: userData.profileImage || '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -98,6 +98,7 @@ export const signUpWithEmail = async (email, password, additionalData = {}) => {
       phoneNumber: additionalData.phoneNumber || '',
       address: additionalData.address || '',
       location: additionalData.location || null,
+      role: additionalData.role || 'customer',
     };
 
     const result = await createUserProfile(user.uid, profileData);
@@ -128,6 +129,14 @@ export const signInWithEmail = async (email, password) => {
     // Get user profile
     const profile = await getUserProfile(user.uid);
 
+    if (!profile.success || !profile.user) {
+      await signOut(auth);
+      return {
+        success: false,
+        error: 'We could not find your WasteWise profile. Please complete signup before logging in.',
+      };
+    }
+
     return {
       success: true,
       user: user,
@@ -151,6 +160,11 @@ export const signInWithGoogle = async () => {
     const existingProfile = await getUserProfile(user.uid);
 
     if (!existingProfile.success) {
+      if (existingProfile.error !== 'User profile not found') {
+        await signOut(auth);
+        return { success: false, error: existingProfile.error };
+      }
+
       // Create new profile for Google user
       const profileData = {
         email: user.email,
@@ -159,9 +173,14 @@ export const signInWithGoogle = async () => {
         lastName: user.displayName?.split(' ')[1] || '',
         profileImage: user.photoURL || '',
         phoneNumber: user.phoneNumber || '',
+        role: 'customer',
       };
 
       const newProfile = await createUserProfile(user.uid, profileData);
+      if (!newProfile.success || !newProfile.user) {
+        await signOut(auth);
+        return { success: false, error: newProfile.error || 'Failed to create profile.' };
+      }
       return {
         success: true,
         user: user,

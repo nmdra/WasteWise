@@ -41,7 +41,9 @@ export default function LoginScreen() {
         // Store user profile data
         if (result.profile) {
           await AsyncStorage.setItem('userRole', result.profile.role || 'customer');
-          await AsyncStorage.setItem('userFirstName', result.profile.firstName || '');
+          const resolvedFirstName =
+            result.profile.firstName || result.profile.displayName || result.user.displayName || '';
+          await AsyncStorage.setItem('userFirstName', resolvedFirstName);
         }
 
         Alert.alert('Success', 'Welcome back!');
@@ -51,7 +53,7 @@ export default function LoginScreen() {
         if (userRole === 'cleaner') {
           router.replace('/(tabs)/cleaner/home');
         } else {
-          router.replace('/(tabs)/customer/home');
+          router.replace('/customer/home');
         }
       } else {
         Alert.alert('Login Failed', result.error || 'Invalid email or password');
@@ -79,7 +81,9 @@ export default function LoginScreen() {
         // Store user profile data
         if (result.profile) {
           await AsyncStorage.setItem('userRole', result.profile.role || 'customer');
-          await AsyncStorage.setItem('userFirstName', result.profile.firstName || result.user.displayName || '');
+          const resolvedFirstName =
+            result.profile.firstName || result.profile.displayName || result.user.displayName || '';
+          await AsyncStorage.setItem('userFirstName', resolvedFirstName);
         }
 
         if (result.isNewUser) {
@@ -93,7 +97,7 @@ export default function LoginScreen() {
         if (userRole === 'cleaner') {
           router.replace('/(tabs)/cleaner/home');
         } else {
-          router.replace('/(tabs)/customer/home');
+          router.replace('/customer/home');
         }
       } else {
         Alert.alert('Google Sign-In Failed', result.error);

@@ -34,16 +34,9 @@ export default function SignUpScreen() {
   };
 
   const validateForm = () => {
-    if (!fillLater) {
-      if (!formData.email || !formData.password) {
-        Alert.alert('Error', 'Email and password are required');
-        return false;
-      }
-    } else {
-      if (!formData.email || !formData.password || !formData.firstName) {
-        Alert.alert('Error', 'Email, password, and first name are required');
-        return false;
-      }
+    if (!formData.email?.trim() || !formData.password || !formData.firstName?.trim()) {
+      Alert.alert('Error', 'First name, email, and password are required');
+      return false;
     }
 
     if (formData.password.length < 6) {
@@ -64,10 +57,12 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
+      const trimmedFirstName = formData.firstName.trim();
+      const trimmedLastName = formData.lastName.trim();
       const result = await signUpWithEmail(formData.email, formData.password, {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        displayName: `${formData.firstName} ${formData.lastName}`.trim(),
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
+        displayName: `${trimmedFirstName} ${trimmedLastName}`.trim(),
         phoneNumber: formData.phoneNumber,
         address: formData.address,
       });
@@ -82,18 +77,20 @@ export default function SignUpScreen() {
         // Store user profile data
         if (result.profile) {
           await AsyncStorage.setItem('userRole', result.profile.role || 'customer');
-          await AsyncStorage.setItem('userFirstName', formData.firstName);
+          const resolvedFirstName =
+            result.profile.firstName || result.profile.displayName || trimmedFirstName || '';
+          await AsyncStorage.setItem('userFirstName', resolvedFirstName);
         }
 
         if (fillLater) {
           Alert.alert(
             'Success',
             'Account created! You can complete your profile later from settings.',
-            [{ text: 'OK', onPress: () => router.replace('/(tabs)/customer/home') }]
+            [{ text: 'OK', onPress: () => router.replace('/customer/home') }]
           );
         } else {
           Alert.alert('Success', 'Account created successfully!', [
-            { text: 'OK', onPress: () => router.replace('/(tabs)/customer/home') },
+            { text: 'OK', onPress: () => router.replace('/customer/home') },
           ]);
         }
       } else {
@@ -125,7 +122,7 @@ export default function SignUpScreen() {
         }
 
         Alert.alert('Success', 'Account created with Google!', [
-          { text: 'OK', onPress: () => router.replace('/(tabs)/customer/home') },
+          { text: 'OK', onPress: () => router.replace('/customer/home') },
         ]);
       } else {
         Alert.alert('Google Sign-Up Failed', result.error);
