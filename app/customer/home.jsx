@@ -29,16 +29,11 @@ export default function CustomerHome() {
   };
 
   const loadUserInfo = async () => {
-    try {
-      const firstName = await AsyncStorage.getItem('userFirstName');
-      const storedRole = await AsyncStorage.getItem('userRole');
-      setUserInfo({
-        name: firstName || '',
-        role: storedRole || 'customer',
-      });
-    } catch (error) {
-      console.error('Error loading user info:', error);
-    }
+    // UI-only mode: no AsyncStorage checks
+    setUserInfo({
+      name: 'Customer',
+      role: 'customer',
+    });
   };
 
   useEffect(() => {

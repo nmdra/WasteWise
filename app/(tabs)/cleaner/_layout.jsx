@@ -41,6 +41,22 @@ export default function CleanerTabLayout() {
           ),
         }}
       />
+      
+      {/* Hide all other screens from tab bar */}
+      <Tabs.Screen name="_layout" options={{ href: null }} />
+      <Tabs.Screen name="analytics" options={{ href: null }} />
+      <Tabs.Screen name="checklist" options={{ href: null }} />
+      <Tabs.Screen name="collection" options={{ href: null }} />
+      <Tabs.Screen name="collection-details" options={{ href: null }} />
+      <Tabs.Screen name="collection-history" options={{ href: null }} />
+      <Tabs.Screen name="confirm-collection" options={{ href: null }} />
+      <Tabs.Screen name="messages" options={{ href: null }} />
+      <Tabs.Screen name="missed" options={{ href: null }} />
+      <Tabs.Screen name="qr" options={{ href: null }} />
+      <Tabs.Screen name="report-issue" options={{ href: null }} />
+      <Tabs.Screen name="scan-bin" options={{ href: null }} />
+      <Tabs.Screen name="scan-error" options={{ href: null }} />
+      <Tabs.Screen name="stop-details" options={{ href: null }} />
     </Tabs>
   );
 }

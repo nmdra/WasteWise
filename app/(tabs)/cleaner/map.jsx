@@ -16,14 +16,8 @@ export default function CleanerMap() {
   }, []);
 
   const loadUser = async () => {
-    try {
-      const firstName = await AsyncStorage.getItem('userFirstName');
-      if (firstName) {
-        setUserName(firstName);
-      }
-    } catch (error) {
-      console.error('Error loading cleaner name:', error);
-    }
+    // UI-only mode: no AsyncStorage checks
+    setUserName('Cleaner');
   };
 
   return (

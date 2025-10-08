@@ -1,5 +1,4 @@
-import { Redirect } from 'expo-router';
-
 export default function Index() {
-  return <Redirect href="/splash" />;
+  // UI-only mode: render nothing, let users navigate manually via URL
+  return null;
 }

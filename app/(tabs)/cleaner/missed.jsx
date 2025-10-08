@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import { MockCleaner } from '../../services/mockCleanerApi';
+import AppHeader from '../../../components/app-header';
+import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
 
 const REASONS = [
   { key: 'no_bin', label: 'No bin out' },

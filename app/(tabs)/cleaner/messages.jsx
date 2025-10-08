@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
-import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import { MockCleaner } from '../../services/mockCleanerApi';
+import AppHeader from '../../../components/app-header';
+import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
 
 export default function CleanerMessages() {
   const [messages, setMessages] = useState([]);

@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import { MockCleaner } from '../../services/mockCleanerApi';
+import AppHeader from '../../../components/app-header';
+import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
 
 export default function CleanerQR() {
   const router = useRouter();

@@ -60,7 +60,7 @@ export default function ProfileScreen() {
                 'userRole',
               ]);
 
-              router.replace('/login');
+              // router.replace('/login');
             } catch (error) {
               console.error('Error logging out:', error);
               Alert.alert('Error', 'Failed to logout');

@@ -44,7 +44,7 @@ export default function OnboardingScreen() {
 
   const handleSkip = async () => {
     await AsyncStorage.setItem('hasSeenOnboarding', 'true');
-    router.replace('/login');
+    router.replace('/customer/home'); // UI-only mode: skip login
   };
 
   const handleNext = () => {

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import AppHeader from '../../components/app-header';
-import { MockCleaner } from '../../services/mockCleanerApi';
-import KeyValue from '../../components/cleaner/KeyValue';
-import StatusChip from '../../components/cleaner/StatusChip';
+import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import AppHeader from '../../../components/app-header';
+import { MockCleaner } from '../../../services/mockCleanerApi';
+import KeyValue from '../../../components/cleaner/KeyValue';
+import StatusChip from '../../../components/cleaner/StatusChip';
 
 export default function StopDetailsScreen() {
   const router = useRouter();
@@ -44,26 +44,35 @@ export default function StopDetailsScreen() {
             activeOpacity={0.9}
             style={styles.primary}
             onPress={() =>
-              router.push({ pathname: '/cleaner/qr', params: { stopId, binId: stop.bin.binId } })
+              router.push({ pathname: '/(tabs)/cleaner/scan-bin', params: { stopId, binId: stop.bin.binId } })
             }
           >
-            <Text style={styles.primaryText}>Scan QR</Text>
+            <Text style={styles.primaryText}>Scan Bin Tag</Text>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.ghost}
             onPress={() =>
-              router.push({ pathname: '/cleaner/collection', params: { stopId, binId: stop.bin.binId } })
+              router.push({ pathname: '/(tabs)/cleaner/collection-details', params: { stopId, binId: stop.bin.binId } })
             }
           >
-            <Text style={styles.ghostText}>Collect (manual)</Text>
+            <Text style={styles.ghostText}>Enter Details</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[styles.ghost, { marginTop: Spacing.sm }]}
+            onPress={() =>
+              router.push({ pathname: '/(tabs)/cleaner/report-issue', params: { stopId, binId: stop.bin.binId } })
+            }
+          >
+            <Text style={styles.ghostText}>Report Issue</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.row}>
           <TouchableOpacity
             style={styles.warn}
-            onPress={() => router.push({ pathname: '/cleaner/missed', params: { stopId } })}
+            onPress={() => router.push({ pathname: '/(tabs)/cleaner/missed', params: { stopId } })}
           >
             <Text style={styles.warnText}>Mark Missed</Text>
           </TouchableOpacity>

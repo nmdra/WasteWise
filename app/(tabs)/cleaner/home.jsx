@@ -18,15 +18,11 @@ export default function CleanerHome() {
   }, []);
 
   const loadUserInfo = async () => {
-    try {
-      const firstName = await AsyncStorage.getItem('userFirstName');
-      setUserInfo({
-        name: firstName || 'Cleaner',
-        role: 'cleaner',
-      });
-    } catch (error) {
-      console.error('Error loading cleaner info:', error);
-    }
+    // UI-only mode: no AsyncStorage checks
+    setUserInfo({
+      // name: 'Cleaner',
+      // role: 'cleaner',
+    });
   };
 
   if (!routeOverview) {
@@ -73,8 +69,9 @@ export default function CleanerHome() {
           <ActionBar
             items={[
               { label: 'Navigate', kind: 'primary', onPress: () => router.push('/(tabs)/cleaner/map') },
-              { label: 'Scan QR', onPress: () => router.push('/cleaner/qr') },
-              { label: 'Checklist', onPress: () => router.push('/cleaner/checklist') },
+              { label: 'Scan Bin', onPress: () => router.push('/(tabs)/cleaner/scan-bin') },
+              { label: 'History', onPress: () => router.push('/(tabs)/cleaner/collection-history') },
+              { label: 'Report Issue', onPress: () => router.push('/(tabs)/cleaner/report-issue') },
             ]}
           />
         </View>

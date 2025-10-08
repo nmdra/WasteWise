@@ -21,14 +21,8 @@ export default function CleanerStops() {
   }, []);
 
   const loadUser = async () => {
-    try {
-      const firstName = await AsyncStorage.getItem('userFirstName');
-      if (firstName) {
-        setUserName(firstName);
-      }
-    } catch (error) {
-      console.error('Error loading cleaner name:', error);
-    }
+    // UI-only mode: no AsyncStorage checks
+    setUserName('Cleaner');
   };
 
   const filteredStops = stops.filter((item) =>
@@ -66,7 +60,7 @@ export default function CleanerStops() {
               style={styles.stopCard}
               activeOpacity={0.85}
               onPress={() =>
-                router.push({ pathname: '/cleaner/stop-details', params: { stopId: item.stopId } })
+                router.push({ pathname: '/(tabs)/cleaner/stop-details', params: { stopId: item.stopId } })
               }
             >
               <View style={{ flex: 1 }}>
