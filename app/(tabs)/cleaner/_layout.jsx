@@ -23,20 +23,20 @@ export default function CleanerTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="map"
+        name="my-schedules"
         options={{
-          title: 'Map',
+          title: 'Schedules',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="navigate" size={size ?? 24} color={color} />
+            <MaterialIcons name="event-note" size={size ?? 24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="stops"
         options={{
-          title: 'Stops',
+          title: 'Scan',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="list-alt" size={size ?? 24} color={color} />
+            <MaterialIcons name="qr-code-scanner" size={size ?? 24} color={color} />
           ),
         }}
       />
@@ -50,6 +50,8 @@ export default function CleanerTabLayout() {
       <Tabs.Screen name="collection-history" options={{ href: null }} />
       <Tabs.Screen name="confirm-collection" options={{ href: null }} />
       <Tabs.Screen name="manage-schedule" options={{ href: null }} />
+      <Tabs.Screen name="schedule-details" options={{ href: null }} />
+      <Tabs.Screen name="map" options={{ href: null }} />
       <Tabs.Screen name="messages" options={{ href: null }} />
       <Tabs.Screen name="missed" options={{ href: null }} />
       <Tabs.Screen name="qr" options={{ href: null }} />

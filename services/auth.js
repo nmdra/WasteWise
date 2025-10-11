@@ -7,6 +7,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../config/firebase';
+import { createCustomerStop } from './stopsService';
 
 /**
  * Create user profile in Firestore
@@ -33,6 +34,16 @@ export const createUserProfile = async (userId, userData) => {
     };
 
     await setDoc(userRef, userProfile);
+    
+    // If customer, create stop entries for active schedules in their zone
+    if (userProfile.role === 'customer' && userProfile.zone && userProfile.address) {
+      console.log('📍 Auto-creating customer stops for new customer...');
+      await createCustomerStop(userId, {
+        zone: userProfile.zone,
+        address: userProfile.address,
+      });
+    }
+    
     return { success: true, user: userProfile };
   } catch (error) {
     console.error('Error creating user profile:', error);

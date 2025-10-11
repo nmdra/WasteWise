@@ -44,7 +44,7 @@ export async function createSchedule(scheduleData) {
     const scheduleRef = await addDoc(collection(db, 'schedules'), dataToSave);
 
     console.log('✅ Schedule created successfully! ID:', scheduleRef.id);
-    return scheduleRef.id;
+    return { success: true, scheduleId: scheduleRef.id };
   } catch (error) {
     console.error('❌ Error creating schedule:', error);
     console.error('Error code:', error.code);

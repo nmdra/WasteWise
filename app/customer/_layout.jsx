@@ -68,6 +68,8 @@ export default function CustomerLayout() {
       <Tabs.Screen name="qr" options={{ href: null }} />
       <Tabs.Screen name="scan" options={{ href: null }} />
       <Tabs.Screen name="schedule" options={{ href: null }} />
+      <Tabs.Screen name="my-schedules" options={{ href: null }} />
+      <Tabs.Screen name="schedule-details" options={{ href: null }} />
       <Tabs.Screen name="payments" options={{ href: null }} />
       <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="education" options={{ href: null }} />

@@ -15,6 +15,7 @@ import { getAuth } from 'firebase/auth';
 import AppHeader from '../../../components/app-header';
 import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
 import { createSchedule, wasteTypeIcons } from '../../../services/scheduleService';
+import { createMainStopsForSchedule } from '../../../services/stopsService';
 
 const ZONES = ['A', 'B', 'C', 'D', 'E'];
 
@@ -41,6 +42,10 @@ export default function ManageSchedule() {
   const [totalSlots, setTotalSlots] = useState('20');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+  
+  // Main stops state
+  const [mainStops, setMainStops] = useState([{ address: '', notes: '' }]);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -71,6 +76,22 @@ export default function ManageSchedule() {
     setTimeRanges(updated);
   };
 
+  // Main stops functions
+  const addMainStop = () => {
+    setMainStops([...mainStops, { address: '', notes: '' }]);
+  };
+
+  const removeMainStop = (index) => {
+    const updated = mainStops.filter((_, i) => i !== index);
+    setMainStops(updated);
+  };
+
+  const updateMainStop = (index, field, value) => {
+    const updated = [...mainStops];
+    updated[index][field] = value;
+    setMainStops(updated);
+  };
+
   // Save schedule to Firestore
   const handleSaveSchedule = async () => {
     console.log('=== SAVE SCHEDULE BUTTON CLICKED ===');
@@ -84,36 +105,13 @@ export default function ManageSchedule() {
     
     console.log('User authenticated:', user.uid, user.email);
     
-    // Validation
-    if (!selectedDate) {
-      console.log('Validation failed: No date selected');
-      Alert.alert('Missing Information', 'Please select a date for the collection schedule.');
+    // Run validation and show inline errors
+    const formValid = validateAndSetErrors();
+    if (!formValid) {
+      console.log('Form validation failed', errors);
+      Alert.alert('Invalid Form', 'Please fix the highlighted fields before creating the schedule.');
       return;
     }
-
-    if (selectedWasteTypes.length === 0) {
-      console.log('Validation failed: No waste types selected');
-      Alert.alert('Missing Information', 'Please select at least one waste type.');
-      return;
-    }
-
-    if (!area.trim()) {
-      console.log('Validation failed: No area entered');
-      Alert.alert('Missing Information', 'Please enter the area/neighborhood.');
-      return;
-    }
-
-    // Validate time ranges
-    for (let i = 0; i < timeRanges.length; i++) {
-      const range = timeRanges[i];
-      if (!range.start || !range.end) {
-        console.log('Validation failed: Time range incomplete', range);
-        Alert.alert('Invalid Time Range', `Time range ${i + 1} is incomplete.`);
-        return;
-      }
-    }
-
-    console.log('All validations passed ✓');
 
     try {
       setSaving(true);
@@ -131,12 +129,25 @@ export default function ManageSchedule() {
       };
 
       console.log('Creating schedule with data:', scheduleData);
-      const scheduleId = await createSchedule(scheduleData);
+      const result = await createSchedule(scheduleData);
+      const scheduleId = result.scheduleId || result;
       console.log('Schedule created successfully with ID:', scheduleId);
+
+      // Create main stops if any are added
+      const validMainStops = mainStops.filter(stop => stop.address.trim() !== '');
+      if (validMainStops.length > 0) {
+        console.log('Creating', validMainStops.length, 'main stops...');
+        const stopsData = validMainStops.map(stop => ({
+          ...stop,
+          zone: selectedZone,
+        }));
+        await createMainStopsForSchedule(scheduleId, stopsData);
+        console.log('Main stops created successfully');
+      }
 
       Alert.alert(
         'Success',
-        `Collection schedule created successfully!\nSchedule ID: ${scheduleId}`,
+        `Collection schedule created successfully!\nSchedule ID: ${scheduleId}\nMain Stops: ${validMainStops.length}`,
         [
           {
             text: 'OK',
@@ -154,6 +165,72 @@ export default function ManageSchedule() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Validation helpers (pure checks + state-updating runner)
+  const getFieldError = (name, value) => {
+    let message = '';
+    switch (name) {
+      case 'selectedDate':
+        if (!value) message = 'Please select a collection date.';
+        break;
+      case 'wasteTypes':
+        if (!value || value.length === 0) message = 'Select at least one waste type.';
+        break;
+      case 'area':
+        if (!value || !value.trim()) message = 'Enter the area or neighborhood.';
+        break;
+      case 'timeRanges':
+        for (let i = 0; i < value.length; i++) {
+          const r = value[i];
+          if (!r.start || !r.end) {
+            message = `Time range ${i + 1} is incomplete.`;
+            break;
+          }
+        }
+        break;
+      default:
+        break;
+    }
+    return message;
+  };
+
+  const validateField = (name, value) => {
+    const message = getFieldError(name, value);
+    setErrors((prev) => ({ ...prev, [name]: message }));
+    return message === '';
+  };
+
+  // Validate and set errors (run on submit)
+  const validateAndSetErrors = () => {
+    const newErrors = {};
+    newErrors.selectedDate = getFieldError('selectedDate', selectedDate);
+    newErrors.wasteTypes = getFieldError('wasteTypes', selectedWasteTypes);
+    newErrors.area = getFieldError('area', area);
+    newErrors.timeRanges = getFieldError('timeRanges', timeRanges);
+
+    // Validate main stops addresses (optional: ensure at least empty allowed)
+    mainStops.forEach((stop, idx) => {
+      const key = `mainStop_${idx}`;
+      if (!stop.address || !stop.address.trim()) {
+        newErrors[key] = 'Enter an address or remove this stop.';
+      } else {
+        newErrors[key] = '';
+      }
+    });
+
+    setErrors(newErrors);
+    return Object.values(newErrors).every((v) => !v);
+  };
+
+  // Pure check used during render (must NOT call setState)
+  const isFormValidPure = () => {
+    const sd = getFieldError('selectedDate', selectedDate);
+    const wt = getFieldError('wasteTypes', selectedWasteTypes);
+    const ar = getFieldError('area', area);
+    const tr = getFieldError('timeRanges', timeRanges);
+    // main stops not required for overall validity (they are optional)
+    return !sd && !wt && !ar && !tr;
   };
 
   return (
@@ -201,6 +278,9 @@ export default function ManageSchedule() {
               })}
             </Text>
           )}
+          {errors.selectedDate ? (
+            <Text style={styles.errorText}>{errors.selectedDate}</Text>
+          ) : null}
         </View>
 
         {/* Time Ranges */}
@@ -209,14 +289,14 @@ export default function ManageSchedule() {
           {timeRanges.map((range, index) => (
             <View key={index} style={styles.timeRangeRow}>
               <TextInput
-                style={styles.timeInput}
+                style={[styles.timeInput, errors.timeRanges ? styles.inputError : null]}
                 placeholder="09:00"
                 value={range.start}
                 onChangeText={(value) => updateTimeRange(index, 'start', value)}
               />
               <Text style={styles.timeSeparator}>to</Text>
               <TextInput
-                style={styles.timeInput}
+                style={[styles.timeInput, errors.timeRanges ? styles.inputError : null]}
                 placeholder="12:00"
                 value={range.end}
                 onChangeText={(value) => updateTimeRange(index, 'end', value)}
@@ -234,6 +314,9 @@ export default function ManageSchedule() {
           <TouchableOpacity style={styles.addTimeRangeButton} onPress={addTimeRange}>
             <Text style={styles.addTimeRangeText}>+ Add Another Time Range</Text>
           </TouchableOpacity>
+          {errors.timeRanges ? (
+            <Text style={styles.errorText}>{errors.timeRanges}</Text>
+          ) : null}
         </View>
 
         {/* Waste Types */}
@@ -292,11 +375,16 @@ export default function ManageSchedule() {
 
           <Text style={styles.inputLabel}>Area / Neighborhood</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.area ? styles.inputError : null]}
             placeholder="e.g., Downtown, Residential Area"
             value={area}
-            onChangeText={setArea}
+            onChangeText={(v) => {
+              setArea(v);
+              if (errors.area) validateField('area', v);
+            }}
+            onBlur={() => validateField('area', area)}
           />
+          {errors.area ? <Text style={styles.errorText}>{errors.area}</Text> : null}
         </View>
 
         {/* Capacity */}
@@ -315,6 +403,54 @@ export default function ManageSchedule() {
           </Text>
         </View>
 
+        {/* Main Stops */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📍 Main Collection Stops</Text>
+          <Text style={styles.helperText}>
+            Add key locations where you'll collect waste. Customer addresses will be added automatically.
+          </Text>
+          
+          {mainStops.map((stop, index) => (
+            <View key={index} style={styles.stopContainer}>
+              <Text style={styles.stopLabel}>Stop {index + 1}</Text>
+              
+              <TextInput
+                style={[styles.input, errors[`mainStop_${index}`] ? styles.inputError : null]}
+                placeholder="Enter address (e.g., Main Street Market)"
+                value={stop.address}
+                onChangeText={(value) => {
+                  updateMainStop(index, 'address', value);
+                  if (errors[`mainStop_${index}`])
+                    setErrors((p) => ({ ...p, [`mainStop_${index}`]: '' }));
+                }}
+              />
+              {errors[`mainStop_${index}`] ? (
+                <Text style={styles.errorText}>{errors[`mainStop_${index}`]}</Text>
+              ) : null}
+              
+              <TextInput
+                style={[styles.input, { marginTop: Spacing.sm }]}
+                placeholder="Notes (optional)"
+                value={stop.notes}
+                onChangeText={(value) => updateMainStop(index, 'notes', value)}
+              />
+              
+              {mainStops.length > 1 && (
+                <TouchableOpacity
+                  style={styles.removeStopButton}
+                  onPress={() => removeMainStop(index)}
+                >
+                  <Text style={styles.removeStopButtonText}>Remove Stop</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+          
+          <TouchableOpacity style={styles.addStopButton} onPress={addMainStop}>
+            <Text style={styles.addStopText}>+ Add Another Stop</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Notes */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Additional Notes (Optional)</Text>
@@ -331,12 +467,15 @@ export default function ManageSchedule() {
         {/* Save Button */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            style={[
+              styles.saveButton,
+              (saving || !isFormValidPure()) && styles.saveButtonDisabled,
+            ]}
             onPress={() => {
               console.log('🔘 CREATE SCHEDULE BUTTON PRESSED!');
               handleSaveSchedule();
             }}
-            disabled={saving}
+            disabled={saving || !isFormValidPure()}
           >
             {saving ? (
               <ActivityIndicator color="#fff" />
@@ -557,5 +696,52 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     fontSize: FontSizes.body,
     fontWeight: '600',
+  },
+  stopContainer: {
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.md,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    marginTop: Spacing.md,
+  },
+  stopLabel: {
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  removeStopButton: {
+    marginTop: Spacing.sm,
+    padding: Spacing.sm,
+    backgroundColor: Colors.state.error,
+    borderRadius: Radii.small,
+    alignItems: 'center',
+  },
+  removeStopButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  addStopButton: {
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.primary || '#16A34A',
+    borderRadius: Radii.small,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+  },
+  addStopText: {
+    color: Colors.primary || '#16A34A',
+    fontWeight: '600',
+  },
+  inputError: {
+    borderColor: Colors.state.error || '#DC2626',
+    borderWidth: 2,
+  },
+  errorText: {
+    color: Colors.state.error || '#DC2626',
+    marginTop: Spacing.xs,
+    fontSize: FontSizes.small,
   },
 });

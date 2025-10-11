@@ -1,37 +1,139 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { getAuth } from 'firebase/auth';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
 import AppHeader from '../../../components/app-header';
 import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
-import { MockCleaner } from '../../../services/mockCleanerApi';
 import ActionBar from '../../../components/cleaner/ActionBar';
+import { getStopStats } from '../../../services/stopsService';
 
 export default function CleanerHome() {
   const router = useRouter();
-  const [routeOverview, setRouteOverview] = useState(null);
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  const [todaySchedule, setTodaySchedule] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState({ name: '', role: 'cleaner' });
 
   useEffect(() => {
-    MockCleaner.getRouteOverview().then(setRouteOverview);
+    loadTodayRoute();
     loadUserInfo();
-  }, []);
+  }, [user]);
 
   const loadUserInfo = async () => {
-    // UI-only mode: no AsyncStorage checks
     setUserInfo({
-      // name: 'Cleaner',
-      // role: 'cleaner',
+      name: user?.displayName || 'Collector',
+      role: 'cleaner',
     });
   };
 
-  if (!routeOverview) {
-    return <View style={{ flex: 1, backgroundColor: Colors.bg.page }} />;
+  const loadTodayRoute = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      
+      // Find today's schedule created by this collector
+      const schedulesQuery = query(
+        collection(db, 'schedules'),
+        where('collectorId', '==', user.uid),
+        where('date', '==', today),
+        where('status', '==', 'active'),
+        limit(1)
+      );
+
+      const snapshot = await getDocs(schedulesQuery);
+      
+      if (!snapshot.empty) {
+        const scheduleDoc = snapshot.docs[0];
+        const scheduleData = {
+          id: scheduleDoc.id,
+          ...scheduleDoc.data(),
+        };
+        
+        setTodaySchedule(scheduleData);
+        
+        // Load stop stats for this schedule
+        const stopStats = await getStopStats(scheduleDoc.id);
+        setStats(stopStats);
+      } else {
+        setTodaySchedule(null);
+        setStats(null);
+      }
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading today route:', error);
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.bg.page }}>
+        <AppHeader userName={userInfo.name} userRole={userInfo.role} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading today's route...</Text>
+        </View>
+      </View>
+    );
   }
 
-  const progressPct = Math.round(
-    (routeOverview.completed / routeOverview.totalStops) * 100,
-  );
+  const progressPct = stats && stats.total > 0
+    ? Math.round((stats.collected / stats.total) * 100)
+    : 0;
+
+  // Show "no schedule" state if no schedule for today
+  if (!todaySchedule) {
+    return (
+      <View style={styles.container}>
+        <AppHeader userName={userInfo.name} userRole={userInfo.role} />
+        
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={{ paddingBottom: Spacing.xxl }}
+        >
+          <View style={styles.heroCard}>
+            <Text style={styles.heroGreeting}>Today's Route 🚛</Text>
+            <Text style={styles.heroSubtitle}>No schedule for today</Text>
+          </View>
+
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📅</Text>
+            <Text style={styles.emptyTitle}>No Collection Schedule</Text>
+            <Text style={styles.emptyText}>
+              You don't have any active collection schedules for today.
+            </Text>
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={() => router.push('/(tabs)/cleaner/manage-schedule')}
+            >
+              <Text style={styles.createButtonText}>Create Schedule</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.viewSchedulesButton}
+              onPress={() => router.push('/(tabs)/cleaner/my-schedules')}
+            >
+              <Text style={styles.viewSchedulesButtonText}>View All Schedules</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  const completed = stats?.collected || 0;
+  const remaining = stats?.pending || 0;
+  const totalStops = stats?.total || 0;
 
   return (
     <View style={styles.container}>
@@ -43,22 +145,22 @@ export default function CleanerHome() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroCard}>
-          <Text style={styles.heroGreeting}>Today’s Route 🚛</Text>
+          <Text style={styles.heroGreeting}>Today's Route 🚛</Text>
           <Text style={styles.heroSubtitle}>
-            Zone {routeOverview.zone} • {routeOverview.totalStops} stops scheduled
+            Zone {todaySchedule.zone} • {totalStops} stops scheduled
           </Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Route Progress</Text>
           <Text style={styles.cardSubtitle}>
-            Route {routeOverview.routeId} • {routeOverview.date}
+            {todaySchedule.area} • {new Date(todaySchedule.date).toLocaleDateString()}
           </Text>
 
           <View style={styles.statsRow}>
-            <StatBlock label="Completed" value={routeOverview.completed} tint={Colors.state.success} />
-            <StatBlock label="Remaining" value={routeOverview.remaining} tint={Colors.state.warning} />
-            <StatBlock label="Total" value={routeOverview.totalStops} tint={Colors.text.primary} />
+            <StatBlock label="Completed" value={completed} tint={Colors.state.success} />
+            <StatBlock label="Remaining" value={remaining} tint={Colors.state.warning} />
+            <StatBlock label="Total" value={totalStops} tint={Colors.text.primary} />
           </View>
 
           <View style={styles.progressWrap}>
@@ -68,38 +170,64 @@ export default function CleanerHome() {
 
           <ActionBar
             items={[
-              { label: 'Navigate', kind: 'primary', onPress: () => router.push('/(tabs)/cleaner/map') },
-              { label: 'Scan Bin', onPress: () => router.push('/(tabs)/cleaner/scan-bin') },
+              { label: 'View Details', kind: 'primary', onPress: () => router.push(`/(tabs)/cleaner/schedule-details?id=${todaySchedule.id}`) },
               { label: 'Manage Schedule', onPress: () => router.push('/(tabs)/cleaner/manage-schedule') },
-              { label: 'History', onPress: () => router.push('/(tabs)/cleaner/collection-history') },
+              { label: 'All Schedules', onPress: () => router.push('/(tabs)/cleaner/my-schedules') },
             ]}
           />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Next stops</Text>
-          {routeOverview.next.map((stop) => (
-            <View key={stop.stopId} style={styles.stopCard}>
-              <View style={styles.stopBadge}>
-                <Text style={styles.stopBadgeText}>{stop.stopId.replace('s_', '#')}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.stopLabel}>{stop.label}</Text>
-                <Text style={styles.stopMeta}>
-                  {stop.distKm} km • {stop.priority}
-                </Text>
-              </View>
-              <Text style={styles.stopNavigate}>→</Text>
+          <Text style={styles.sectionTitle}>Schedule Info</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>📍 Zone:</Text>
+              <Text style={styles.infoValue}>{todaySchedule.zone}</Text>
             </View>
-          ))}
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>🏘️ Area:</Text>
+              <Text style={styles.infoValue}>{todaySchedule.area}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>⏰ Time:</Text>
+              <Text style={styles.infoValue}>
+                {todaySchedule.timeRanges?.map(r => `${r.start} - ${r.end}`).join(', ')}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>🗑️ Waste Types:</Text>
+              <Text style={styles.infoValue}>
+                {todaySchedule.wasteTypes?.join(', ') || 'N/A'}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shift details</Text>
-          <View style={styles.shiftCard}>
-            <Text style={styles.shiftTime}>06:30 - 14:30</Text>
-            <Text style={styles.shiftNote}>Break 12:00 - 12:30</Text>
-          </View>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push(`/(tabs)/cleaner/schedule-details?id=${todaySchedule.id}`)}
+          >
+            <Text style={styles.actionIcon}>📋</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>View All Stops</Text>
+              <Text style={styles.actionSubtitle}>See complete stop list and mark collections</Text>
+            </View>
+            <Text style={styles.actionArrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/(tabs)/cleaner/my-schedules')}
+          >
+            <Text style={styles.actionIcon}>📅</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>My Schedules</Text>
+              <Text style={styles.actionSubtitle}>View all your collection schedules</Text>
+            </View>
+            <Text style={styles.actionArrow}>→</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -136,6 +264,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg.page,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+  },
   scroll: {
     flex: 1,
   },
@@ -155,6 +293,53 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
     color: Colors.text.secondary,
     fontSize: FontSizes.body,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xxl,
+    marginTop: 100,
+  },
+  emptyIcon: {
+    fontSize: 80,
+    marginBottom: Spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: FontSizes.h2,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  emptyText: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  createButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radii.card,
+    marginBottom: Spacing.md,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+  },
+  viewSchedulesButton: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  viewSchedulesButtonText: {
+    color: Colors.primary,
+    fontSize: FontSizes.body,
+    fontWeight: '700',
   },
   card: {
     marginHorizontal: Spacing.lg,
@@ -205,58 +390,60 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     marginBottom: Spacing.md,
   },
-  stopCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.bg.card,
-    padding: Spacing.md,
-    borderRadius: Radii.card,
-    borderWidth: 1,
-    borderColor: Colors.line,
-    marginBottom: Spacing.sm,
-  },
-  stopBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FEF3C7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
-  },
-  stopBadgeText: {
-    color: Colors.role.cleaner,
-    fontWeight: '700',
-  },
-  stopLabel: {
-    fontWeight: '700',
-    color: Colors.text.primary,
-    fontSize: FontSizes.body,
-  },
-  stopMeta: {
-    marginTop: Spacing.xs,
-    color: Colors.text.secondary,
-    fontSize: FontSizes.small,
-  },
-  stopNavigate: {
-    color: Colors.role.cleaner,
-    fontWeight: '700',
-    fontSize: FontSizes.h3,
-  },
-  shiftCard: {
+  infoCard: {
     backgroundColor: Colors.bg.card,
     borderRadius: Radii.card,
     borderWidth: 1,
     borderColor: Colors.line,
     padding: Spacing.lg,
   },
-  shiftTime: {
-    fontSize: FontSizes.h2,
-    fontWeight: '700',
-    color: Colors.role.cleaner,
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.line,
   },
-  shiftNote: {
-    marginTop: Spacing.xs,
+  infoLabel: {
+    fontSize: FontSizes.body,
     color: Colors.text.secondary,
+    fontWeight: '600',
+  },
+  infoValue: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: Spacing.md,
+  },
+  actionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.lg,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    marginBottom: Spacing.md,
+  },
+  actionIcon: {
+    fontSize: 40,
+    marginRight: Spacing.md,
+  },
+  actionTitle: {
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  actionSubtitle: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    marginTop: 2,
+  },
+  actionArrow: {
+    fontSize: FontSizes.h2,
+    color: Colors.primary,
+    fontWeight: '700',
   },
 });
