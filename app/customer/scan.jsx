@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Camera, CameraView } from 'expo-camera';
-import { BarCodeScanner } from 'expo-barcode-scanner';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import AppHeader from '../../components/app-header';
 import Button from '../../components/customer/Button';
+import { Colors, FontSizes, Spacing } from '../../constants/customerTheme';
 
 export default function LinkBinScan() {
   const router = useRouter();

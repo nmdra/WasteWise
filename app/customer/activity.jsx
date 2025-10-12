@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AppHeader from '../../components/app-header';
-import ListItem from '../../components/customer/ListItem';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 import { MockCustomer } from '../../services/mockCustomerApi';
 
 export default function Activity() {

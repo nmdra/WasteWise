@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
+import MapboxView from '../../../components/cleaner/MapboxView';
 import { Colors } from '../../../constants/customerTheme';
 import { MockCleaner } from '../../../services/mockCleanerApi';
-import MapboxView from '../../../components/cleaner/MapboxView';
 
 export default function CleanerMap() {
   const [mapData, setMapData] = useState(null);

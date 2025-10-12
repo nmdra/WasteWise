@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { Calendar } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
 import { getAuth } from 'firebase/auth';
+import { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import AppHeader from '../../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
-import { createSchedule, wasteTypeIcons } from '../../../services/scheduleService';
+import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
+import { createSchedule } from '../../../services/scheduleService';
 import { createMainStopsForSchedule } from '../../../services/stopsService';
 
 const ZONES = ['A', 'B', 'C', 'D', 'E'];

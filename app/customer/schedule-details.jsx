@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import { wasteTypeIcons, formatScheduleDate, formatTimeRange } from '../../services/scheduleService';
+import { db } from '../../config/firebase';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
+import { formatScheduleDate, formatTimeRange, wasteTypeIcons } from '../../services/scheduleService';
 import { getStopStats } from '../../services/stopsService';
 
 export default function ScheduleDetails() {
@@ -84,8 +84,8 @@ export default function ScheduleDetails() {
   };
 
   const handleBookPickup = () => {
-    // Navigate to special pickup with schedule info
-    router.push(`/customer/special-pickup?scheduleId=${id}`);
+    // Navigate to create booking with schedule info
+    router.push(`/customer/create-booking?scheduleId=${id}`);
   };
 
   if (loading) {

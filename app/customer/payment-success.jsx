@@ -1,14 +1,13 @@
-import React from 'react';
-import {
-  SafeAreaView,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
 import { useRouter } from 'expo-router';
+import {
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 
 const ActionButton = ({ title, icon, onPress, secondary }) => (
   <TouchableOpacity style={[styles.button, secondary ? styles.buttonOutline : styles.button]} onPress={onPress}>

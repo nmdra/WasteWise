@@ -1,16 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuth } from 'firebase/auth';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import { MockCustomer } from '../../services/mockCustomerApi';
-import { getNextSchedule, formatScheduleDate, formatTimeRange, wasteTypeIcons } from '../../services/scheduleService';
-import { getUserProfile } from '../../services/auth';
+import { useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../components/app-header';
-import StatCard from '../../components/customer/StatCard';
 import ListItem from '../../components/customer/ListItem';
-import Button from '../../components/customer/Button';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
+import { getUserProfile } from '../../services/auth';
+import { MockCustomer } from '../../services/mockCustomerApi';
+import { formatScheduleDate, formatTimeRange, getNextSchedule, wasteTypeIcons } from '../../services/scheduleService';
 
 export default function CustomerHome() {
   const router = useRouter();
@@ -227,8 +224,24 @@ export default function CustomerHome() {
               style={styles.actionCard}
               onPress={() => router.push('/customer/my-bills')}
             >
-              <Text style={styles.actionIcon}>�</Text>
+              <Text style={styles.actionIcon}>💵</Text>
               <Text style={styles.actionLabel}>Bills</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionCard}
+              onPress={() => router.push('/customer/create-booking')}
+            >
+              <Text style={styles.actionIcon}>📋</Text>
+              <Text style={styles.actionLabel}>Special Pickup</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionCard}
+              onPress={() => router.push('/customer/my-bookings')}
+            >
+              <Text style={styles.actionIcon}>📑</Text>
+              <Text style={styles.actionLabel}>My Bookings</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -1,26 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  TextInput,
-  Platform,
-} from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../../config/firebase';
+import { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import AppHeader from '../../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { db } from '../../../config/firebase';
+import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
 import { wasteTypeIcons } from '../../../services/scheduleService';
 import {
-  subscribeToStopsBySchedule,
-  markStopAsCollected,
-  markStopAsSkipped,
-  getStopStats,
+    getStopStats,
+    markStopAsCollected,
+    markStopAsSkipped,
+    subscribeToStopsBySchedule,
 } from '../../../services/stopsService';
 
 export default function ScheduleDetails() {

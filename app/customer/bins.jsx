@@ -1,66 +1,194 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import { MockCustomer } from '../../services/mockCustomerApi';
+import { getAuth } from 'firebase/auth';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import AppHeader from '../../components/app-header';
-import ListItem from '../../components/customer/ListItem';
-import Button from '../../components/customer/Button';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
+import {
+  BIN_CATEGORIES,
+  getUserBins,
+  getUserBinStats,
+  subscribeToUserBins,
+  toggleBinStatus,
+} from '../../services/binService';
 
-export default function MyBins() {
+export default function BinsScreen() {
   const router = useRouter();
+  const auth = getAuth();
+  const user = auth.currentUser;
+
   const [bins, setBins] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState('all'); // all, active, inactive
 
   useEffect(() => {
-    loadBins();
-  }, []);
+    if (user) {
+      loadBins();
+      loadStats();
+    }
+  }, [user]);
 
   const loadBins = async () => {
+    if (!user) return;
+
     try {
-      const data = await MockCustomer.getBins();
-      setBins(data);
+      setLoading(true);
+      
+      // Subscribe to real-time updates
+      const unsubscribe = subscribeToUserBins(user.uid, (updatedBins) => {
+        setBins(updatedBins);
+        setLoading(false);
+        setRefreshing(false);
+      });
+
+      return unsubscribe;
     } catch (error) {
       console.error('Error loading bins:', error);
-    } finally {
+      Alert.alert('Error', 'Failed to load bins');
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const loadStats = async () => {
+    if (!user) return;
+
+    try {
+      const binStats = await getUserBinStats(user.uid);
+      setStats(binStats);
+    } catch (error) {
+      console.error('Error loading stats:', error);
     }
   };
 
   const onRefresh = () => {
     setRefreshing(true);
     loadBins();
+    loadStats();
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active':
-        return Colors.status.completed;
-      case 'inactive':
-        return Colors.status.cancelled;
-      default:
-        return Colors.text.muted;
+  const handleToggleStatus = async (binId, currentStatus) => {
+    try {
+      await toggleBinStatus(binId, !currentStatus);
+      Alert.alert(
+        'Success',
+        `Bin ${!currentStatus ? 'activated' : 'deactivated'} successfully`
+      );
+      loadStats(); // Refresh stats
+    } catch (error) {
+      console.error('Error toggling bin status:', error);
+      Alert.alert('Error', 'Failed to update bin status');
     }
+  };
+
+  const handleBinPress = (bin) => {
+    router.push(`/customer/qr?binId=${bin.id}`);
+  };
+
+  const filteredBins = bins.filter((bin) => {
+    if (filter === 'all') return true;
+    if (filter === 'active') return bin.isActive;
+    if (filter === 'inactive') return !bin.isActive;
+    return true;
+  });
+
+  const renderBinCard = ({ item: bin }) => {
+    const categoryInfo = BIN_CATEGORIES[bin.category] || BIN_CATEGORIES.general;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.binCard,
+          !bin.isActive && styles.binCardInactive,
+        ]}
+        onPress={() => handleBinPress(bin)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.binHeader}>
+          <View style={[styles.categoryIcon, { backgroundColor: categoryInfo.color }]}>
+            <Text style={styles.categoryEmoji}>{categoryInfo.icon}</Text>
+          </View>
+          <View style={styles.binHeaderInfo}>
+            <Text style={styles.binCategory}>{categoryInfo.label}</Text>
+            <Text style={styles.binCode}>{bin.binId}</Text>
+          </View>
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: bin.isActive ? Colors.state.success : Colors.state.error },
+          ]}>
+            <Text style={styles.statusText}>
+              {bin.isActive ? 'Active' : 'Inactive'}
+            </Text>
+          </View>
+        </View>
+
+        {bin.description && (
+          <Text style={styles.binDescription}>{bin.description}</Text>
+        )}
+
+        {bin.location && (
+          <View style={styles.binInfo}>
+            <Text style={styles.binInfoLabel}>📍 Location:</Text>
+            <Text style={styles.binInfoValue}>{bin.location}</Text>
+          </View>
+        )}
+
+        <View style={styles.binInfo}>
+          <Text style={styles.binInfoLabel}>📊 Scans:</Text>
+          <Text style={styles.binInfoValue}>{bin.scanCount || 0} times</Text>
+        </View>
+
+        {bin.lastScanned && (
+          <View style={styles.binInfo}>
+            <Text style={styles.binInfoLabel}>⏱️ Last Scanned:</Text>
+            <Text style={styles.binInfoValue}>
+              {new Date(bin.lastScanned).toLocaleDateString()}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.binActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleBinPress(bin)}
+          >
+            <Text style={styles.actionButtonText}>View QR Code</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.toggleButton,
+              !bin.isActive && styles.activateButton,
+            ]}
+            onPress={() => handleToggleStatus(bin.id, bin.isActive)}
+          >
+            <Text style={styles.actionButtonText}>
+              {bin.isActive ? 'Deactivate' : 'Activate'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={{ flex: 1, backgroundColor: Colors.bg.page }}>
         <AppHeader />
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading your bins...</Text>
         </View>
       </View>
     );
@@ -69,139 +197,108 @@ export default function MyBins() {
   return (
     <View style={styles.container}>
       <AppHeader />
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.brand.green]} />
-        }
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>My Bins</Text>
-          <Text style={styles.subtitle}>Manage your registered waste bins</Text>
-        </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push('/customer/scan')}
-          >
-            <Text style={styles.actionIcon}>📷</Text>
-            <Text style={styles.actionTitle}>Link New Bin</Text>
-            <Text style={styles.actionDesc}>Scan QR code</Text>
-          </TouchableOpacity>
+      <View style={styles.header}>
+        <Text style={styles.title}>My Bins</Text>
+        <Text style={styles.subtitle}>Manage your waste bin QR codes</Text>
+      </View>
 
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push('/customer/qr')}
-          >
-            <Text style={styles.actionIcon}>🏷️</Text>
-            <Text style={styles.actionTitle}>My QR Code</Text>
-            <Text style={styles.actionDesc}>Show & print</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Bins List */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Registered Bins ({bins.length})</Text>
-          
-          {bins.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>🗑️</Text>
-              <Text style={styles.emptyTitle}>No bins registered</Text>
-              <Text style={styles.emptyText}>
-                Link your first bin by scanning its QR code
-              </Text>
-              <Button
-                title="Link Bin"
-                onPress={() => router.push('/customer/scan')}
-                variant="primary"
-              />
-            </View>
-          ) : (
-            bins.map((bin) => (
-              <View key={bin.binId} style={styles.binCard}>
-                <View style={styles.binHeader}>
-                  <View style={styles.binTitleRow}>
-                    <Text style={styles.binId}>🗑️ Bin {bin.binId}</Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        { backgroundColor: getStatusColor(bin.status) },
-                      ]}
-                    >
-                      <Text style={styles.statusText}>{bin.status}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.binInfo}>
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Tag ID:</Text>
-                    <Text style={styles.infoValue}>{bin.tagId}</Text>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Types:</Text>
-                    <View style={styles.typeChips}>
-                      {bin.types.map((type, index) => (
-                        <View key={index} style={styles.typeChip}>
-                          <Text style={styles.typeText}>{type}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Last Collected:</Text>
-                    <Text style={styles.infoValue}>{formatDate(bin.lastCollected)}</Text>
-                  </View>
-
-                  {bin.notes && (
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Notes:</Text>
-                      <Text style={styles.infoValue}>{bin.notes}</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.binActions}>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Text style={styles.actionButtonText}>📊 History</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Text style={styles.actionButtonText}>✏️ Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Text style={styles.actionButtonText}>🗑️ Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* Info Cards */}
-        <View style={styles.infoCards}>
-          <View style={styles.infoCard}>
-            <Text style={styles.infoCardIcon}>💡</Text>
-            <Text style={styles.infoCardTitle}>Bin QR Codes</Text>
-            <Text style={styles.infoCardText}>
-              Each bin should have a QR code sticker. Make sure it's visible and not damaged.
-            </Text>
+      {/* Stats Section */}
+      {stats && (
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{stats.total}</Text>
+            <Text style={styles.statLabel}>Total Bins</Text>
           </View>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoCardIcon}>📱</Text>
-            <Text style={styles.infoCardTitle}>Quick Verification</Text>
-            <Text style={styles.infoCardText}>
-              During pickup, cleaners scan your bin's QR code to log the collection automatically.
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: Colors.state.success }]}>
+              {stats.active}
             </Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: Colors.state.error }]}>
+              {stats.inactive}
+            </Text>
+            <Text style={styles.statLabel}>Inactive</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: Colors.primary }]}>
+              {stats.totalScans}
+            </Text>
+            <Text style={styles.statLabel}>Scans</Text>
           </View>
         </View>
+      )}
 
-        <View style={{ height: Spacing.xxl }} />
-      </ScrollView>
+      {/* Filter Tabs */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
+          onPress={() => setFilter('all')}
+        >
+          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
+            All ({bins.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'active' && styles.filterTabActive]}
+          onPress={() => setFilter('active')}
+        >
+          <Text style={[styles.filterText, filter === 'active' && styles.filterTextActive]}>
+            Active ({bins.filter(b => b.isActive).length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'inactive' && styles.filterTabActive]}
+          onPress={() => setFilter('inactive')}
+        >
+          <Text style={[styles.filterText, filter === 'inactive' && styles.filterTextActive]}>
+            Inactive ({bins.filter(b => !b.isActive).length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Bins List */}
+      {filteredBins.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>🗑️</Text>
+          <Text style={styles.emptyTitle}>No bins yet</Text>
+          <Text style={styles.emptyText}>
+            Create QR codes for your bins to start tracking your waste collection
+          </Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => router.push('/customer/link-bin')}
+          >
+            <Text style={styles.createButtonText}>Create Bin QR Code</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredBins}
+          renderItem={renderBinCard}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.primary]}
+            />
+          }
+        />
+      )}
+
+      {/* Floating Action Button */}
+      {bins.length > 0 && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push('/customer/link-bin')}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -217,78 +314,186 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: Colors.text.muted,
+    marginTop: Spacing.md,
     fontSize: FontSizes.body,
-  },
-  content: {
-    flex: 1,
+    color: Colors.text.secondary,
   },
   header: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.md,
+    backgroundColor: Colors.bg.card,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.line,
   },
   title: {
     fontSize: FontSizes.h1,
     fontWeight: '700',
     color: Colors.text.primary,
-    marginBottom: Spacing.xs,
   },
   subtitle: {
     fontSize: FontSizes.body,
     color: Colors.text.secondary,
+    marginTop: Spacing.xs,
   },
-  quickActions: {
+  statsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  actionCard: {
-    flex: 1,
-    backgroundColor: Colors.bg.card,
     padding: Spacing.lg,
-    borderRadius: Radii.card,
-    borderWidth: 1,
-    borderColor: Colors.line,
+    backgroundColor: Colors.bg.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.line,
+  },
+  statCard: {
+    flex: 1,
     alignItems: 'center',
   },
-  actionIcon: {
-    fontSize: 32,
-    marginBottom: Spacing.sm,
-  },
-  actionTitle: {
-    fontSize: FontSizes.body,
-    fontWeight: '600',
-    color: Colors.text.primary,
-    marginBottom: Spacing.xs,
-  },
-  actionDesc: {
-    fontSize: FontSizes.small,
-    color: Colors.text.secondary,
-  },
-  section: {
-    padding: Spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: FontSizes.h3,
+  statValue: {
+    fontSize: FontSizes.h2,
     fontWeight: '700',
     color: Colors.text.primary,
-    marginBottom: Spacing.md,
   },
-  emptyState: {
+  statLabel: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    marginTop: Spacing.xs,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    padding: Spacing.md,
     backgroundColor: Colors.bg.card,
-    padding: Spacing.xl,
-    borderRadius: Radii.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.line,
+    gap: Spacing.sm,
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radii.pill,
+    backgroundColor: Colors.bg.light,
     alignItems: 'center',
+  },
+  filterTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  filterText: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    fontWeight: '600',
+  },
+  filterTextActive: {
+    color: '#fff',
+  },
+  listContent: {
+    padding: Spacing.lg,
+  },
+  binCard: {
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.line,
+  },
+  binCardInactive: {
+    opacity: 0.6,
+    backgroundColor: Colors.bg.light,
+  },
+  binHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  categoryIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: Radii.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryEmoji: {
+    fontSize: 28,
+  },
+  binHeaderInfo: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  binCategory: {
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  binCode: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    marginTop: 2,
+    fontFamily: 'monospace',
+  },
+  statusBadge: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radii.pill,
+  },
+  statusText: {
+    fontSize: FontSizes.small,
+    color: '#fff',
+    fontWeight: '700',
+  },
+  binDescription: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.sm,
+    fontStyle: 'italic',
+  },
+  binInfo: {
+    flexDirection: 'row',
+    paddingVertical: Spacing.xs,
+  },
+  binInfoLabel: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    width: 120,
+  },
+  binInfoValue: {
+    flex: 1,
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    fontWeight: '600',
+  },
+  binActions: {
+    flexDirection: 'row',
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.small,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  toggleButton: {
+    backgroundColor: Colors.state.error,
+  },
+  activateButton: {
+    backgroundColor: Colors.state.success,
+  },
+  actionButtonText: {
+    fontSize: FontSizes.body,
+    color: '#fff',
+    fontWeight: '700',
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xxl,
   },
   emptyIcon: {
     fontSize: 64,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   emptyTitle: {
-    fontSize: FontSizes.h3,
+    fontSize: FontSizes.h2,
     fontWeight: '700',
     color: Colors.text.primary,
     marginBottom: Spacing.sm,
@@ -297,117 +502,38 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.body,
     color: Colors.text.secondary,
     textAlign: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
-  binCard: {
-    backgroundColor: Colors.bg.card,
-    borderRadius: Radii.card,
-    borderWidth: 1,
-    borderColor: Colors.line,
-    marginBottom: Spacing.md,
-    overflow: 'hidden',
-  },
-  binHeader: {
-    padding: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.line,
-  },
-  binTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  binId: {
-    fontSize: FontSizes.h3,
-    fontWeight: '700',
-    color: Colors.text.primary,
-  },
-  statusBadge: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radii.chip,
-  },
-  statusText: {
-    fontSize: FontSizes.tiny,
-    fontWeight: '700',
-    color: Colors.text.white,
-    textTransform: 'uppercase',
-  },
-  binInfo: {
-    padding: Spacing.lg,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  infoLabel: {
-    fontSize: FontSizes.small,
-    color: Colors.text.secondary,
-    fontWeight: '600',
-  },
-  infoValue: {
-    fontSize: FontSizes.small,
-    color: Colors.text.primary,
-    fontWeight: '600',
-  },
-  typeChips: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-  },
-  typeChip: {
-    backgroundColor: Colors.brand.lightGreen,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: Radii.chip,
-  },
-  typeText: {
-    fontSize: FontSizes.tiny,
-    fontWeight: '600',
-    color: Colors.brand.green,
-  },
-  binActions: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: Colors.line,
-  },
-  actionButton: {
-    flex: 1,
+  createButton: {
+    backgroundColor: Colors.primary,
     paddingVertical: Spacing.md,
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: Colors.line,
-  },
-  actionButtonText: {
-    fontSize: FontSizes.small,
-    color: Colors.brand.green,
-    fontWeight: '600',
-  },
-  infoCards: {
-    paddingHorizontal: Spacing.lg,
-  },
-  infoCard: {
-    backgroundColor: Colors.bg.card,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
     borderRadius: Radii.card,
-    borderWidth: 1,
-    borderColor: Colors.line,
-    marginBottom: Spacing.md,
   },
-  infoCardIcon: {
-    fontSize: 32,
-    marginBottom: Spacing.sm,
-  },
-  infoCardTitle: {
+  createButtonText: {
+    color: '#fff',
     fontSize: FontSizes.body,
     fontWeight: '700',
-    color: Colors.text.primary,
-    marginBottom: Spacing.xs,
   },
-  infoCardText: {
-    fontSize: FontSizes.small,
-    color: Colors.text.secondary,
-    lineHeight: 18,
+  fab: {
+    position: 'absolute',
+    right: Spacing.lg,
+    bottom: Spacing.lg,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  fabText: {
+    fontSize: 32,
+    color: '#fff',
+    fontWeight: '700',
   },
 });

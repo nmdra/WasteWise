@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import AppHeader from '../../components/app-header';
-import { Colors, Spacing, FontSizes } from '../../constants/customerTheme';
+import { Colors, FontSizes, Spacing } from '../../constants/customerTheme';
 import { MockCustomer } from '../../services/mockCustomerApi';
 
 export default function CustomerMap() {

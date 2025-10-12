@@ -1,15 +1,14 @@
-import React from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   SafeAreaView,
-  View,
+  ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
+  View,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
 import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 
 const DetailRow = ({ label, value, valueStyle }) => (
   <View style={styles.detailRow}>

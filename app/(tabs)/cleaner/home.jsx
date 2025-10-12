@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { getAuth } from 'firebase/auth';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../../config/firebase';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
 import ActionBar from '../../../components/cleaner/ActionBar';
+import { db } from '../../../config/firebase';
+import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
 import { getStopStats } from '../../../services/stopsService';
+import { getPendingBookingsByZone } from '../../../services/bookingService';
+import { getUserProfile } from '../../../services/userService';
 
 export default function CleanerHome() {
   const router = useRouter();
@@ -19,10 +20,13 @@ export default function CleanerHome() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState({ name: '', role: 'cleaner' });
+  const [pendingBookings, setPendingBookings] = useState([]);
+  const [userZone, setUserZone] = useState(null);
 
   useEffect(() => {
     loadTodayRoute();
     loadUserInfo();
+    loadUserZoneAndBookings();
   }, [user]);
 
   const loadUserInfo = async () => {
@@ -30,6 +34,22 @@ export default function CleanerHome() {
       name: user?.displayName || 'Collector',
       role: 'cleaner',
     });
+  };
+
+  const loadUserZoneAndBookings = async () => {
+    if (!user) return;
+
+    try {
+      const profile = await getUserProfile(user.uid);
+      if (profile?.zone) {
+        setUserZone(profile.zone);
+        // Load pending bookings for this zone
+        const bookings = await getPendingBookingsByZone(profile.zone);
+        setPendingBookings(bookings);
+      }
+    } catch (error) {
+      console.error('Error loading user zone and bookings:', error);
+    }
   };
 
   const loadTodayRoute = async () => {
@@ -107,6 +127,46 @@ export default function CleanerHome() {
             <Text style={styles.heroSubtitle}>No schedule for today</Text>
           </View>
 
+          {/* Booking Stats Card */}
+          {userZone && (
+            <View style={[styles.card, styles.bookingStatsCard]}>
+              <Text style={styles.cardTitle}>📦 Special Pickups</Text>
+              <Text style={styles.cardSubtitle}>
+                Zone {userZone} • Manage customer booking requests
+              </Text>
+              
+              <View style={styles.statsRow}>
+                <View style={styles.bookingStatItem}>
+                  <Text style={[styles.bookingStatValue, { color: Colors.state.warning }]}>
+                    {pendingBookings.length}
+                  </Text>
+                  <Text style={styles.bookingStatLabel}>Pending</Text>
+                </View>
+                <View style={styles.bookingStatItem}>
+                  <Text style={styles.bookingStatValue}>
+                    {pendingBookings.filter(b => {
+                      const reqDate = new Date(b.requestDate);
+                      const today = new Date();
+                      const diffTime = Math.abs(today - reqDate);
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      return diffDays <= 2;
+                    }).length}
+                  </Text>
+                  <Text style={styles.bookingStatLabel}>Urgent</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.bookingManagementButton}
+                onPress={() => router.push('/(tabs)/cleaner/booking-management')}
+              >
+                <Text style={styles.bookingManagementButtonText}>
+                  View All Bookings →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>📅</Text>
             <Text style={styles.emptyTitle}>No Collection Schedule</Text>
@@ -177,6 +237,53 @@ export default function CleanerHome() {
           />
         </View>
 
+        {/* Booking Stats Card */}
+        {userZone && (
+          <View style={[styles.card, styles.bookingStatsCard]}>
+            <View style={styles.bookingHeader}>
+              <View>
+                <Text style={styles.cardTitle}>📦 Special Pickups</Text>
+                <Text style={styles.cardSubtitle}>Customer booking requests</Text>
+              </View>
+              {pendingBookings.length > 0 && (
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>{pendingBookings.length}</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.bookingQuickStats}>
+              <View style={styles.bookingQuickStatItem}>
+                <Text style={[styles.bookingQuickStatValue, { color: Colors.state.warning }]}>
+                  {pendingBookings.length}
+                </Text>
+                <Text style={styles.bookingQuickStatLabel}>Pending</Text>
+              </View>
+              <View style={styles.bookingQuickStatItem}>
+                <Text style={[styles.bookingQuickStatValue, { color: Colors.state.error }]}>
+                  {pendingBookings.filter(b => {
+                    const reqDate = new Date(b.requestDate);
+                    const today = new Date();
+                    const diffTime = Math.abs(today - reqDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    return diffDays <= 2;
+                  }).length}
+                </Text>
+                <Text style={styles.bookingQuickStatLabel}>Urgent (2d)</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.bookingManagementButton}
+              onPress={() => router.push('/(tabs)/cleaner/booking-management')}
+            >
+              <Text style={styles.bookingManagementButtonText}>
+                Manage All Bookings →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Schedule Info</Text>
           <View style={styles.infoCard}>
@@ -225,6 +332,18 @@ export default function CleanerHome() {
             <View style={{ flex: 1 }}>
               <Text style={styles.actionTitle}>My Schedules</Text>
               <Text style={styles.actionSubtitle}>View all your collection schedules</Text>
+            </View>
+            <Text style={styles.actionArrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => router.push('/(tabs)/cleaner/booking-management')}
+          >
+            <Text style={styles.actionIcon}>📦</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>Booking Management</Text>
+              <Text style={styles.actionSubtitle}>View and manage all customer bookings</Text>
             </View>
             <Text style={styles.actionArrow}>→</Text>
           </TouchableOpacity>
@@ -444,6 +563,74 @@ const styles = StyleSheet.create({
   actionArrow: {
     fontSize: FontSizes.h2,
     color: Colors.primary,
+    fontWeight: '700',
+  },
+  bookingStatsCard: {
+    backgroundColor: '#f0f9ff',
+    borderColor: Colors.primary,
+  },
+  bookingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  pendingBadge: {
+    backgroundColor: Colors.state.warning,
+    borderRadius: Radii.pill,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    minWidth: 32,
+    alignItems: 'center',
+  },
+  pendingBadgeText: {
+    color: '#fff',
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+  },
+  bookingStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+  },
+  bookingStatValue: {
+    fontSize: FontSizes.h1,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  bookingStatLabel: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    marginTop: Spacing.xs,
+  },
+  bookingQuickStats: {
+    flexDirection: 'row',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  bookingQuickStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  bookingQuickStatValue: {
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  bookingQuickStatLabel: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    marginTop: Spacing.xs,
+  },
+  bookingManagementButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: Radii.small,
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
+  bookingManagementButtonText: {
+    color: '#fff',
+    fontSize: FontSizes.body,
     fontWeight: '700',
   },
 });

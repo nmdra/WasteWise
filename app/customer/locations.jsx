@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../components/app-header';
-import ListItem from '../../components/customer/ListItem';
 import Button from '../../components/customer/Button';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 import { MockCustomer } from '../../services/mockCustomerApi';
 
 export default function Locations() {

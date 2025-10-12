@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
-import { MockCleaner } from '../../../services/mockCleanerApi';
 import KeyValue from '../../../components/cleaner/KeyValue';
 import StatusChip from '../../../components/cleaner/StatusChip';
+import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
 
 export default function StopDetailsScreen() {
   const router = useRouter();

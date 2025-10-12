@@ -1,6 +1,5 @@
-import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 
 export default function ActionBar({ items = [] }) {
   return (

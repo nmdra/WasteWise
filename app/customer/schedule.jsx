@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import { getAuth } from 'firebase/auth';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   SafeAreaView,
-  View,
+  ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
+  View,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { getAuth } from 'firebase/auth';
 import AppHeader from '../../components/app-header';
 import { Colors } from '../../constants/customerTheme';
-import { 
-  subscribeToSchedulesByZone, 
-  wasteTypeColors, 
-  wasteTypeIcons,
-  formatTimeRange 
-} from '../../services/scheduleService';
 import { getUserProfile } from '../../services/auth';
+import {
+  formatTimeRange,
+  subscribeToSchedulesByZone,
+  wasteTypeColors,
+  wasteTypeIcons
+} from '../../services/scheduleService';
 
 const ZONES = ['A', 'B', 'C', 'D', 'E'];
 

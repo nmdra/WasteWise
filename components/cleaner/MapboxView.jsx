@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, View, Text, FlatList } from 'react-native';
+import { useMemo } from 'react';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../../constants/customerTheme';
 
 const formatNumber = (value) => {

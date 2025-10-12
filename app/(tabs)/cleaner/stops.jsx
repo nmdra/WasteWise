@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
-import { MockCleaner } from '../../../services/mockCleanerApi';
 import StatusChip from '../../../components/cleaner/StatusChip';
+import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
+import { MockCleaner } from '../../../services/mockCleanerApi';
 
 const FILTERS = ['all', 'pending', 'completed'];
 

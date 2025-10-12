@@ -1,16 +1,15 @@
-import React from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
 import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 
 const FormSection = ({ title, children }) => (
   <View style={styles.section}>

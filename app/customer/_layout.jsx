@@ -1,6 +1,5 @@
-import React from 'react';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/customerTheme';
 
 export default function CustomerLayout() {
@@ -70,6 +69,9 @@ export default function CustomerLayout() {
       <Tabs.Screen name="schedule" options={{ href: null }} />
       <Tabs.Screen name="my-schedules" options={{ href: null }} />
       <Tabs.Screen name="schedule-details" options={{ href: null }} />
+      <Tabs.Screen name="create-booking" options={{ href: null }} />
+      <Tabs.Screen name="my-bookings" options={{ href: null }} />
+      <Tabs.Screen name="booking-details" options={{ href: null }} />
       <Tabs.Screen name="payments" options={{ href: null }} />
       <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="education" options={{ href: null }} />

@@ -1,6 +1,5 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import React from 'react';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 
 export default function CleanerTabLayout() {
   return (
@@ -51,6 +50,10 @@ export default function CleanerTabLayout() {
       <Tabs.Screen name="confirm-collection" options={{ href: null }} />
       <Tabs.Screen name="manage-schedule" options={{ href: null }} />
       <Tabs.Screen name="schedule-details" options={{ href: null }} />
+      <Tabs.Screen name="pending-bookings" options={{ href: null }} />
+      <Tabs.Screen name="booking-approval" options={{ href: null }} />
+      <Tabs.Screen name="booking-management" options={{ href: null }} />
+      <Tabs.Screen name="booking-detail" options={{ href: null }} />
       <Tabs.Screen name="map" options={{ href: null }} />
       <Tabs.Screen name="messages" options={{ href: null }} />
       <Tabs.Screen name="missed" options={{ href: null }} />

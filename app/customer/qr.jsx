@@ -1,42 +1,65 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share } from 'react-native';
-import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, Share, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
 import AppHeader from '../../components/app-header';
 import Button from '../../components/customer/Button';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
+import { getBinById, BIN_CATEGORIES } from '../../services/binService';
 
 export default function MyQR() {
   const router = useRouter();
+  const { binId } = useLocalSearchParams(); // Get Firestore document ID from route params
   const [nonce, setNonce] = useState('');
   const [qrData, setQrData] = useState(null);
   const [userId, setUserId] = useState('');
+  const [bin, setBin] = useState(null);
+  const [loading, setLoading] = useState(true);
   let qrRef = null;
 
   useEffect(() => {
-    loadUserData();
-  }, []);
+    loadBinData();
+  }, [binId]);
 
-  const loadUserData = async () => {
+  const loadBinData = async () => {
     try {
+      setLoading(true);
       const id = await AsyncStorage.getItem('userId');
-      const email = await AsyncStorage.getItem('userEmail');
       setUserId(id || 'guest');
-      generateQR(id || 'guest');
+
+      if (binId) {
+        // Load bin details from Firestore
+        const binData = await getBinById(binId);
+        if (binData) {
+          setBin(binData);
+          generateQR(id || 'guest', binId, binData);
+        } else {
+          Alert.alert('Error', 'Bin not found');
+          router.back();
+        }
+      } else {
+        // Fallback to generic account QR if no binId provided
+        generateQR(id || 'guest', null, null);
+      }
+      
+      setLoading(false);
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error('Error loading bin data:', error);
+      Alert.alert('Error', 'Failed to load bin details');
+      setLoading(false);
     }
   };
 
-  const generateQR = (uid) => {
+  const generateQR = (uid, firestoreBinId, binData) => {
     const timestamp = Date.now();
     const newNonce = `${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
     const data = {
       accountId: uid,
-      binId: 'bin_primary',
+      binId: firestoreBinId || 'bin_primary', // Use Firestore document ID
+      binCategory: binData?.category || null,
       nonce: newNonce,
-      type: 'customer_verification',
+      type: firestoreBinId ? 'bin_qr' : 'customer_verification',
       timestamp: timestamp,
     };
     setNonce(newNonce);
@@ -44,15 +67,15 @@ export default function MyQR() {
   };
 
   const handleRefresh = () => {
-    generateQR(userId);
+    generateQR(userId, binId, bin);
     Alert.alert('Success', 'QR code refreshed!');
   };
 
   const handleShare = async () => {
     try {
-      // In a real app, you'd save the QR as an image first
+      const binInfo = bin ? `\nBin: ${bin.category} (${binId})` : '';
       await Share.share({
-        message: `My WasteWise QR Code\nAccount ID: ${userId}\nNonce: ${nonce}`,
+        message: `My WasteWise QR Code\nAccount ID: ${userId}${binInfo}\nNonce: ${nonce}`,
         title: 'Share QR Code',
       });
     } catch (error) {
@@ -71,44 +94,108 @@ export default function MyQR() {
   return (
     <View style={styles.container}>
       <AppHeader />
-      <ScrollView style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>My QR Code</Text>
-          <Text style={styles.subtitle}>
-            Show this QR to the cleaner during pickup or print and paste it on your bin
-          </Text>
+      
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading bin QR code...</Text>
         </View>
+      ) : (
+        <ScrollView style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>
+              {bin ? `${BIN_CATEGORIES[bin.category]?.label || bin.category} Bin QR` : 'My QR Code'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {bin 
+                ? 'Show this QR to the collector during pickup or print and paste it on your bin'
+                : 'Show this QR to the cleaner during pickup or print and paste it on your bin'
+              }
+            </Text>
+          </View>
 
-        {/* QR Code Display */}
-        <View style={styles.qrContainer}>
-          <View style={styles.qrCard}>
-            {qrData ? (
-              <QRCode
-                value={qrData}
-                size={240}
-                color={Colors.text.primary}
-                backgroundColor={Colors.bg.card}
-                getRef={(ref) => (qrRef = ref)}
-              />
-            ) : (
-              <View style={styles.qrPlaceholder}>
-                <Text style={styles.qrPlaceholderText}>Generating QR...</Text>
+          {/* Bin Details Card */}
+          {bin && (
+            <View style={styles.binDetailsCard}>
+              <View style={styles.binDetailRow}>
+                <View style={[
+                  styles.categoryIconLarge,
+                  { backgroundColor: BIN_CATEGORIES[bin.category]?.color || Colors.primary }
+                ]}>
+                  <Text style={styles.categoryEmojiLarge}>
+                    {BIN_CATEGORIES[bin.category]?.icon || '🗑️'}
+                  </Text>
+                </View>
+                <View style={styles.binDetailInfo}>
+                  <Text style={styles.binDetailCategory}>
+                    {BIN_CATEGORIES[bin.category]?.label || bin.category}
+                  </Text>
+                  {bin.description && (
+                    <Text style={styles.binDetailDescription}>{bin.description}</Text>
+                  )}
+                  {bin.location && (
+                    <Text style={styles.binDetailLocation}>📍 {bin.location}</Text>
+                  )}
+                </View>
+              </View>
+              
+              <View style={styles.binStatsRow}>
+                <View style={styles.binStat}>
+                  <Text style={styles.binStatValue}>{bin.scanCount || 0}</Text>
+                  <Text style={styles.binStatLabel}>Scans</Text>
+                </View>
+                <View style={styles.binStat}>
+                  <Text style={[
+                    styles.binStatValue,
+                    { color: bin.isActive ? Colors.state.success : Colors.state.error }
+                  ]}>
+                    {bin.isActive ? 'Active' : 'Inactive'}
+                  </Text>
+                  <Text style={styles.binStatLabel}>Status</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* QR Code Display */}
+          <View style={styles.qrContainer}>
+            <View style={styles.qrCard}>
+              {qrData ? (
+                <QRCode
+                  value={qrData}
+                  size={240}
+                  color={Colors.text.primary}
+                  backgroundColor={Colors.bg.card}
+                  getRef={(ref) => (qrRef = ref)}
+                />
+              ) : (
+                <View style={styles.qrPlaceholder}>
+                  <Text style={styles.qrPlaceholderText}>Generating QR...</Text>
+                </View>
+              )}
+            </View>
+            
+            <View style={styles.qrInfo}>
+              <Text style={styles.infoLabel}>Account ID</Text>
+              <Text style={styles.infoValue}>{userId}</Text>
+            </View>
+
+            <View style={styles.qrInfo}>
+              <Text style={styles.infoLabel}>{bin ? 'Bin ID (Firestore)' : 'QR Code ID'}</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {bin ? binId : nonce}
+              </Text>
+            </View>
+
+            {bin && (
+              <View style={styles.qrInfo}>
+                <Text style={styles.infoLabel}>Custom Bin ID</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {bin.binId}
+                </Text>
               </View>
             )}
           </View>
-          
-          <View style={styles.qrInfo}>
-            <Text style={styles.infoLabel}>Account ID</Text>
-            <Text style={styles.infoValue}>{userId}</Text>
-          </View>
-
-          <View style={styles.qrInfo}>
-            <Text style={styles.infoLabel}>QR Code ID</Text>
-            <Text style={styles.infoValue} numberOfLines={1}>
-              {nonce}
-            </Text>
-          </View>
-        </View>
 
         {/* Actions */}
         <View style={styles.actions}>
@@ -200,6 +287,7 @@ export default function MyQR() {
 
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -208,6 +296,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bg.page,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.bg.page,
+  },
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
   },
   content: {
     flex: 1,
@@ -226,6 +325,70 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.body,
     color: Colors.text.secondary,
     lineHeight: 22,
+  },
+  binDetailsCard: {
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.lg,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    marginBottom: Spacing.xl,
+  },
+  binDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  categoryIconLarge: {
+    width: 60,
+    height: 60,
+    borderRadius: Radii.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryEmojiLarge: {
+    fontSize: 32,
+  },
+  binDetailInfo: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  binDetailCategory: {
+    fontSize: FontSizes.h3,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
+  },
+  binDetailDescription: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    fontStyle: 'italic',
+    marginBottom: Spacing.xs,
+  },
+  binDetailLocation: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+  },
+  binStatsRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: Colors.line,
+    paddingTop: Spacing.md,
+    gap: Spacing.md,
+  },
+  binStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  binStatValue: {
+    fontSize: FontSizes.h3,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
+  },
+  binStatLabel: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
   },
   qrContainer: {
     alignItems: 'center',

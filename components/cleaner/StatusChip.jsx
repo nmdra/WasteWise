@@ -1,6 +1,5 @@
-import React from 'react';
-import { Text, View, StyleSheet } from 'react-native';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { StyleSheet, Text, View } from 'react-native';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 
 const STATUS_MAP = {
   completed: { bg: '#DCFCE7', fg: Colors.state.success, label: 'Completed' },

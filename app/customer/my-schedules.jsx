@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
 import { useRouter } from 'expo-router';
 import { getAuth } from 'firebase/auth';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import AppHeader from '../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
-import { wasteTypeIcons, formatScheduleDate, formatTimeRange } from '../../services/scheduleService';
+import { db } from '../../config/firebase';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 import { getUserProfile } from '../../services/auth';
+import { formatScheduleDate, formatTimeRange, wasteTypeIcons } from '../../services/scheduleService';
 
 export default function MySchedules() {
   const router = useRouter();

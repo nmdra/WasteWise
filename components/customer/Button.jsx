@@ -1,6 +1,5 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 
 export default function Button({ 
   title, 

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
-import { Colors, Radii, Spacing, FontSizes } from '../../../constants/customerTheme';
+import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
 
 const MOCK_HISTORY = [
   {
