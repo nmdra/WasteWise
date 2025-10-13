@@ -135,10 +135,10 @@ export default function CustomerHome() {
 
             <TouchableOpacity 
               style={styles.actionCard}
-              onPress={() => router.push('/customer/report')}
+              onPress={() => router.push('/customer/my-bills')}
             >
-              <Text style={styles.actionIcon}>📢</Text>
-              <Text style={styles.actionLabel}>Report</Text>
+              <Text style={styles.actionIcon}>�</Text>
+              <Text style={styles.actionLabel}>Bills</Text>
             </TouchableOpacity>
           </View>
         </View>

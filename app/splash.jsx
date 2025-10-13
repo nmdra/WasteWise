@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { onAuthStateChange, getUserProfile } from '../services/auth';
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -25,25 +26,58 @@ export default function SplashScreen() {
       }),
     ]).start();
 
-    // UI-only mode: Skip Firebase auth and navigate to customer home after splash
-    const timeoutId = setTimeout(async () => {
+    // Check authentication state
+    const checkAuth = async () => {
       try {
         const hasSeenOnboarding = await AsyncStorage.getItem('hasSeenOnboarding');
-        if (!hasSeenOnboarding) {
-          router.replace('/onboarding');
-        } else {
-          // Default to customer home for UI testing
-          router.replace('/customer/home');
-        }
+        
+        // Wait for animation to complete
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Listen to auth state
+        const unsubscribe = onAuthStateChange(async (user) => {
+          if (user) {
+            // User is signed in, get their profile to determine role
+            const profileResult = await getUserProfile(user.uid);
+            
+            if (profileResult.success && profileResult.user) {
+              const userRole = profileResult.user.role;
+              
+              // Store user data
+              await AsyncStorage.setItem('userId', user.uid);
+              await AsyncStorage.setItem('userEmail', user.email);
+              await AsyncStorage.setItem('userRole', userRole);
+              await AsyncStorage.setItem('userFirstName', profileResult.user.firstName || '');
+              
+              // Route based on role
+              if (userRole === 'cleaner') {
+                router.replace('/(tabs)/cleaner/home');
+              } else {
+                router.replace('/customer/home');
+              }
+            } else {
+              // Profile not found, go to login
+              router.replace('/login');
+            }
+          } else {
+            // No user signed in
+            if (!hasSeenOnboarding) {
+              router.replace('/onboarding');
+            } else {
+              router.replace('/login');
+            }
+          }
+        });
+
+        // Cleanup
+        return () => unsubscribe();
       } catch (error) {
         console.error('Error during splash:', error);
-        router.replace('/customer/home');
+        router.replace('/login');
       }
-    }, 1500);
-
-    return () => {
-      clearTimeout(timeoutId);
     };
+
+    checkAuth();
   }, []);
 
   return (
