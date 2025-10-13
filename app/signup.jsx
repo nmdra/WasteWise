@@ -74,7 +74,7 @@ export default function SignUpScreen() {
         const token = await result.user.getIdToken();
         await AsyncStorage.setItem('userToken', token);
         await AsyncStorage.setItem('userId', result.user.uid);
-        await AsyncStorage.setItem('userEmail', result.user.email);
+        await AsyncStorage.setItem('userEmail', result.user.email || '');
         
         // Store user profile data
         if (result.profile) {
@@ -84,16 +84,14 @@ export default function SignUpScreen() {
           await AsyncStorage.setItem('userFirstName', resolvedFirstName);
         }
 
+        // Navigate first
+        navigateToDashboard(result.profile?.role || 'customer');
+        
+        // Show success message after navigation
         if (fillLater) {
-          Alert.alert(
-            'Success',
-            'Account created! You can complete your profile later from settings.',
-            [{ text: 'OK', onPress: () => navigateToDashboard(result.profile.role) }]
-          );
+          setTimeout(() => Alert.alert('Success', 'Account created! You can complete your profile later.'), 100);
         } else {
-          Alert.alert('Success', 'Account created successfully!', [
-            { text: 'OK', onPress: () => navigateToDashboard(result.profile.role) },
-          ]);
+          setTimeout(() => Alert.alert('Success', 'Account created successfully!'), 100);
         }
       } else {
         Alert.alert('Sign Up Failed', result.error);
@@ -123,7 +121,7 @@ export default function SignUpScreen() {
         const token = await result.user.getIdToken();
         await AsyncStorage.setItem('userToken', token);
         await AsyncStorage.setItem('userId', result.user.uid);
-        await AsyncStorage.setItem('userEmail', result.user.email);
+        await AsyncStorage.setItem('userEmail', result.user.email || '');
         
         // Store user profile data
         if (result.profile) {
@@ -131,15 +129,20 @@ export default function SignUpScreen() {
           await AsyncStorage.setItem('userFirstName', result.profile.firstName || result.user.displayName || '');
         }
 
-        Alert.alert('Success', 'Account created with Google!', [
-          { text: 'OK', onPress: () => navigateToDashboard(result.profile.role) },
-        ]);
+        // Navigate first
+        navigateToDashboard(result.profile?.role || 'customer');
+        
+        // Show success message after navigation
+        setTimeout(() => Alert.alert('Success', 'Account created with Google!'), 100);
       } else {
-        Alert.alert('Google Sign-Up Failed', result.error);
+        // Don't show alert if user just cancelled the popup
+        if (!result.cancelled) {
+          Alert.alert('Google Sign-Up Failed', result.error || 'Please try again');
+        }
       }
     } catch (error) {
-      Alert.alert('Error', error.message);
-      console.error(error);
+      Alert.alert('Error', error.message || 'Google sign-up failed');
+      console.error('Google sign-up error:', error);
     } finally {
       setLoading(false);
     }

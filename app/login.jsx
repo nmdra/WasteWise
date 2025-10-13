@@ -36,7 +36,7 @@ export default function LoginScreen() {
         const token = await result.user.getIdToken();
         await AsyncStorage.setItem('userToken', token);
         await AsyncStorage.setItem('userId', result.user.uid);
-        await AsyncStorage.setItem('userEmail', result.user.email);
+        await AsyncStorage.setItem('userEmail', result.user.email || '');
         
         // Store user profile data
         if (result.profile) {
@@ -46,15 +46,16 @@ export default function LoginScreen() {
           await AsyncStorage.setItem('userFirstName', resolvedFirstName);
         }
 
-        Alert.alert('Success', 'Welcome back!');
-        
-        // Navigate based on role
+        // Navigate based on role IMMEDIATELY
         const userRole = result.profile?.role || 'customer';
         if (userRole === 'cleaner') {
           router.replace('/(tabs)/cleaner/home');
         } else {
           router.replace('/customer/home');
         }
+        
+        // Show success message after navigation
+        setTimeout(() => Alert.alert('Success', 'Welcome back!'), 100);
       } else {
         Alert.alert('Login Failed', result.error || 'Invalid email or password');
       }
@@ -76,7 +77,7 @@ export default function LoginScreen() {
         const token = await result.user.getIdToken();
         await AsyncStorage.setItem('userToken', token);
         await AsyncStorage.setItem('userId', result.user.uid);
-        await AsyncStorage.setItem('userEmail', result.user.email);
+        await AsyncStorage.setItem('userEmail', result.user.email || '');
         
         // Store user profile data
         if (result.profile) {
@@ -86,25 +87,31 @@ export default function LoginScreen() {
           await AsyncStorage.setItem('userFirstName', resolvedFirstName);
         }
 
-        if (result.isNewUser) {
-          Alert.alert('Welcome!', 'Account created successfully. You can complete your profile later.');
-        } else {
-          Alert.alert('Success', 'Welcome back!');
-        }
-
-        // Navigate based on role
+        // Navigate based on role IMMEDIATELY (don't wait for Alert)
         const userRole = result.profile?.role || 'customer';
+        
+        // Navigate first
         if (userRole === 'cleaner') {
           router.replace('/(tabs)/cleaner/home');
         } else {
           router.replace('/customer/home');
         }
+
+        // Show success message after navigation
+        if (result.isNewUser) {
+          setTimeout(() => Alert.alert('Welcome!', 'Account created successfully.'), 100);
+        } else {
+          setTimeout(() => Alert.alert('Success', 'Welcome back!'), 100);
+        }
       } else {
-        Alert.alert('Google Sign-In Failed', result.error);
+        // Don't show alert if user just cancelled the popup
+        if (!result.cancelled) {
+          Alert.alert('Google Sign-In Failed', result.error || 'Please try again');
+        }
       }
     } catch (error) {
       Alert.alert('Error', error.message || 'Google sign-in failed');
-      console.error(error);
+      console.error('Google sign-in error:', error);
     } finally {
       setLoading(false);
     }

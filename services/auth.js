@@ -25,6 +25,7 @@ export const createUserProfile = async (userId, userData) => {
       address: userData.address || '',
       location: userData.location || null,
       role: userData.role || 'customer',
+      zone: userData.zone || 'A', // Default zone A
       profileImage: userData.profileImage || '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -197,6 +198,18 @@ export const signInWithGoogle = async (rolePreference = 'customer') => {
     };
   } catch (error) {
     console.error('Error signing in with Google:', error);
+    
+    // Handle specific error cases
+    if (error.code === 'auth/popup-closed-by-user') {
+      return { success: false, error: 'Sign-in cancelled. Please try again.', cancelled: true };
+    }
+    if (error.code === 'auth/popup-blocked') {
+      return { success: false, error: 'Popup was blocked by browser. Please allow popups and try again.', cancelled: true };
+    }
+    if (error.code === 'auth/cancelled-popup-request') {
+      return { success: false, error: 'Another sign-in attempt is in progress.', cancelled: true };
+    }
+    
     return { success: false, error: error.message };
   }
 };

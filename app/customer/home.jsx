@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth } from 'firebase/auth';
 import { Colors, Radii, Spacing, FontSizes } from '../../constants/customerTheme';
 import { MockCustomer } from '../../services/mockCustomerApi';
+import { getNextSchedule, formatScheduleDate, formatTimeRange, wasteTypeIcons } from '../../services/scheduleService';
+import { getUserProfile } from '../../services/auth';
 import AppHeader from '../../components/app-header';
 import StatCard from '../../components/customer/StatCard';
 import ListItem from '../../components/customer/ListItem';
@@ -11,10 +14,15 @@ import Button from '../../components/customer/Button';
 
 export default function CustomerHome() {
   const router = useRouter();
+  const auth = getAuth();
+  const user = auth.currentUser;
+  
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [userInfo, setUserInfo] = useState({ name: '', role: 'customer' });
+  const [userInfo, setUserInfo] = useState({ name: '', role: 'customer', zone: 'A' });
+  const [nextSchedule, setNextSchedule] = useState(null);
+  const [scheduleLoading, setScheduleLoading] = useState(true);
 
   const loadData = async () => {
     try {
@@ -29,21 +37,62 @@ export default function CustomerHome() {
   };
 
   const loadUserInfo = async () => {
-    // UI-only mode: no AsyncStorage checks
-    setUserInfo({
-      name: 'Customer',
-      role: 'customer',
-    });
+    try {
+      if (!user) return;
+      
+      const result = await getUserProfile(user.uid);
+      if (result.success && result.user) {
+        setUserInfo({
+          name: result.user.displayName || result.user.firstName || 'Customer',
+          role: result.user.role || 'customer',
+          zone: result.user.zone || 'A',
+        });
+      } else {
+        // Fallback to default
+        setUserInfo({
+          name: 'Customer',
+          role: 'customer',
+          zone: 'A',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user info:', error);
+      setUserInfo({
+        name: 'Customer',
+        role: 'customer',
+        zone: 'A',
+      });
+    }
+  };
+
+  const loadNextSchedule = async () => {
+    try {
+      setScheduleLoading(true);
+      // Wait for user info to load first
+      if (!userInfo.zone) {
+        await loadUserInfo();
+      }
+      
+      const userZone = userInfo.zone || 'A';
+      const schedule = await getNextSchedule(userZone);
+      setNextSchedule(schedule);
+    } catch (error) {
+      console.error('Error loading next schedule:', error);
+    } finally {
+      setScheduleLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
     loadUserInfo();
+    loadNextSchedule();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadData();
+    loadNextSchedule();
   };
 
   if (loading) {
@@ -84,6 +133,47 @@ export default function CustomerHome() {
                 <Text style={styles.alertText}>{alert.text}</Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Next Collection Schedule - NEW SECTION */}
+        {nextSchedule && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>📅 Next Collection Schedule</Text>
+            <View style={styles.scheduleCard}>
+              <View style={styles.scheduleHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.scheduleDate}>
+                    {formatScheduleDate(nextSchedule.date)}
+                  </Text>
+                  <Text style={styles.scheduleArea}>
+                    {nextSchedule.area} • Zone {nextSchedule.zone}
+                  </Text>
+                  <View style={styles.timeRangesContainer}>
+                    {nextSchedule.timeRanges?.map((range, idx) => (
+                      <View key={idx} style={styles.timeRangeBadge}>
+                        <Text style={styles.timeRangeText}>
+                          ⏰ {formatTimeRange(range)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.wasteTypesContainer}>
+                    {nextSchedule.wasteTypes?.map((type) => (
+                      <Text key={type} style={styles.wasteTypeTag}>
+                        {wasteTypeIcons[type]} {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={styles.viewScheduleButton}
+                onPress={() => router.push('/customer/schedule')}
+              >
+                <Text style={styles.viewScheduleText}>View All Schedules →</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -192,7 +282,14 @@ export default function CustomerHome() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>More Services</Text>
           <ListItem
-            leftIcon="💰"
+            leftIcon="�"
+            title="My Profile"
+            subtitle="Manage your account and preferences"
+            rightIcon="→"
+            onPress={() => router.push('/customer/profile')}
+          />
+          <ListItem
+            leftIcon="�💰"
             title="Payments & Invoices"
             subtitle="View and pay your bills"
             rightIcon="→"
@@ -369,5 +466,68 @@ const styles = StyleSheet.create({
     color: Colors.brand.green,
     fontWeight: '600',
     fontSize: FontSizes.small,
+  },
+  scheduleCard: {
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    padding: Spacing.lg,
+  },
+  scheduleHeader: {
+    flexDirection: 'row',
+    marginBottom: Spacing.md,
+  },
+  scheduleDate: {
+    fontSize: FontSizes.h3,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.xs,
+  },
+  scheduleArea: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.md,
+  },
+  timeRangesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  timeRangeBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radii.chip,
+  },
+  timeRangeText: {
+    fontSize: FontSizes.small,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  wasteTypesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
+  wasteTypeTag: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    backgroundColor: Colors.bg.light,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radii.small,
+  },
+  viewScheduleButton: {
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.line,
+  },
+  viewScheduleText: {
+    color: Colors.brand.green,
+    fontWeight: '700',
+    fontSize: FontSizes.body,
   },
 });

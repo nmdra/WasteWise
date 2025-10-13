@@ -70,8 +70,8 @@ export default function CleanerHome() {
             items={[
               { label: 'Navigate', kind: 'primary', onPress: () => router.push('/(tabs)/cleaner/map') },
               { label: 'Scan Bin', onPress: () => router.push('/(tabs)/cleaner/scan-bin') },
+              { label: 'Manage Schedule', onPress: () => router.push('/(tabs)/cleaner/manage-schedule') },
               { label: 'History', onPress: () => router.push('/(tabs)/cleaner/collection-history') },
-              { label: 'Report Issue', onPress: () => router.push('/(tabs)/cleaner/report-issue') },
             ]}
           />
         </View>

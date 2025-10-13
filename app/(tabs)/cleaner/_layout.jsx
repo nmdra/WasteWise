@@ -49,6 +49,7 @@ export default function CleanerTabLayout() {
       <Tabs.Screen name="collection-details" options={{ href: null }} />
       <Tabs.Screen name="collection-history" options={{ href: null }} />
       <Tabs.Screen name="confirm-collection" options={{ href: null }} />
+      <Tabs.Screen name="manage-schedule" options={{ href: null }} />
       <Tabs.Screen name="messages" options={{ href: null }} />
       <Tabs.Screen name="missed" options={{ href: null }} />
       <Tabs.Screen name="qr" options={{ href: null }} />

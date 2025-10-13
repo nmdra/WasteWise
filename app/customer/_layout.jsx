@@ -64,6 +64,7 @@ export default function CustomerLayout() {
       />
 
       {/* Hide these from tabs but keep them accessible via navigation */}
+      <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="qr" options={{ href: null }} />
       <Tabs.Screen name="scan" options={{ href: null }} />
       <Tabs.Screen name="schedule" options={{ href: null }} />
