@@ -14,6 +14,7 @@ import { logOut } from '../services/auth';
 export default function ProfileScreen() {
   const router = useRouter();
   const [userData, setUserData] = useState(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -47,6 +48,7 @@ export default function ProfileScreen() {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
+            setLoggingOut(true);
             try {
               // Call Firebase logout to end session
               await logOut();
@@ -60,10 +62,23 @@ export default function ProfileScreen() {
                 'userRole',
               ]);
 
-              // router.replace('/login');
+              // Small delay to ensure async cleanup is processed
+              setTimeout(() => {
+                try {
+                  router.replace('/login');
+                } catch (navErr) {
+                  console.error('Navigation error after logout:', navErr);
+                }
+              }, 150);
+
+              Alert.alert('Logged out', 'You have been signed out.', [
+                { text: 'OK', onPress: () => {} },
+              ]);
             } catch (error) {
               console.error('Error logging out:', error);
               Alert.alert('Error', 'Failed to logout');
+            } finally {
+              setLoggingOut(false);
             }
           },
         },
@@ -151,8 +166,8 @@ export default function ProfileScreen() {
         </View>
 
         {/* Logout Button */}
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>🚪 Logout</Text>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn} disabled={loggingOut}>
+          <Text style={styles.logoutText}>{loggingOut ? 'Signing out...' : '🚪 Logout'}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
