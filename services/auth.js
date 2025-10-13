@@ -151,7 +151,7 @@ export const signInWithEmail = async (email, password) => {
 /**
  * Sign in with Google
  */
-export const signInWithGoogle = async () => {
+export const signInWithGoogle = async (rolePreference = 'customer') => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
@@ -165,7 +165,7 @@ export const signInWithGoogle = async () => {
         return { success: false, error: existingProfile.error };
       }
 
-      // Create new profile for Google user
+      // Create new profile for Google user with preferred role
       const profileData = {
         email: user.email,
         displayName: user.displayName || user.email.split('@')[0],
@@ -173,7 +173,7 @@ export const signInWithGoogle = async () => {
         lastName: user.displayName?.split(' ')[1] || '',
         profileImage: user.photoURL || '',
         phoneNumber: user.phoneNumber || '',
-        role: 'customer',
+        role: rolePreference, // Use the role preference passed from signup
       };
 
       const newProfile = await createUserProfile(user.uid, profileData);

@@ -28,6 +28,7 @@ export default function SignUpScreen() {
   });
   const [loading, setLoading] = useState(false);
   const [fillLater, setFillLater] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('customer'); // 'customer' or 'collector'
 
   const updateFormData = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -65,6 +66,7 @@ export default function SignUpScreen() {
         displayName: `${trimmedFirstName} ${trimmedLastName}`.trim(),
         phoneNumber: formData.phoneNumber,
         address: formData.address,
+        role: selectedRole === 'collector' ? 'cleaner' : 'customer', // Map collector -> cleaner
       });
 
       if (result.success) {
@@ -86,11 +88,11 @@ export default function SignUpScreen() {
           Alert.alert(
             'Success',
             'Account created! You can complete your profile later from settings.',
-            [{ text: 'OK', onPress: () => router.replace('/customer/home') }]
+            [{ text: 'OK', onPress: () => navigateToDashboard(result.profile.role) }]
           );
         } else {
           Alert.alert('Success', 'Account created successfully!', [
-            { text: 'OK', onPress: () => router.replace('/customer/home') },
+            { text: 'OK', onPress: () => navigateToDashboard(result.profile.role) },
           ]);
         }
       } else {
@@ -104,10 +106,18 @@ export default function SignUpScreen() {
     }
   };
 
+  const navigateToDashboard = (role) => {
+    if (role === 'cleaner') {
+      router.replace('/(tabs)/cleaner/home');
+    } else {
+      router.replace('/customer/home');
+    }
+  };
+
   const handleGoogleSignUp = async () => {
     setLoading(true);
     try {
-      const result = await signInWithGoogle();
+      const result = await signInWithGoogle(selectedRole === 'collector' ? 'cleaner' : 'customer');
 
       if (result.success) {
         const token = await result.user.getIdToken();
@@ -122,7 +132,7 @@ export default function SignUpScreen() {
         }
 
         Alert.alert('Success', 'Account created with Google!', [
-          { text: 'OK', onPress: () => router.replace('/customer/home') },
+          { text: 'OK', onPress: () => navigateToDashboard(result.profile.role) },
         ]);
       } else {
         Alert.alert('Google Sign-Up Failed', result.error);
@@ -148,7 +158,47 @@ export default function SignUpScreen() {
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join WasteWise as a Customer</Text>
+          <Text style={styles.subtitle}>Join WasteWise</Text>
+        </View>
+
+        {/* Role Selection */}
+        <View style={styles.roleContainer}>
+          <Text style={styles.roleTitle}>I want to sign up as:</Text>
+          <View style={styles.roleButtons}>
+            <TouchableOpacity
+              onPress={() => setSelectedRole('customer')}
+              style={[
+                styles.roleButton,
+                selectedRole === 'customer' && styles.roleButtonActive,
+              ]}>
+              <Text
+                style={[
+                  styles.roleButtonText,
+                  selectedRole === 'customer' && styles.roleButtonTextActive,
+                ]}>
+                👤 Customer
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSelectedRole('collector')}
+              style={[
+                styles.roleButton,
+                selectedRole === 'collector' && styles.roleButtonActive,
+              ]}>
+              <Text
+                style={[
+                  styles.roleButtonText,
+                  selectedRole === 'collector' && styles.roleButtonTextActive,
+                ]}>
+                🚛 Collector
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.roleHint}>
+            {selectedRole === 'customer'
+              ? 'Access waste collection, schedules, and payments'
+              : 'Manage collection routes, pickups, and reports'}
+          </Text>
         </View>
 
         {/* Fill Later Toggle */}
@@ -300,7 +350,7 @@ export default function SignUpScreen() {
           By creating an account, you agree to our{' '}
           <Text style={styles.legalLink}>Terms of Service</Text> and{' '}
           <Text style={styles.legalLink}>Privacy Policy</Text>. You will be
-          registered as a <Text style={styles.roleText}>Customer</Text>.
+          registered as a <Text style={styles.roleText}>{selectedRole === 'collector' ? 'Collector' : 'Customer'}</Text>.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -476,5 +526,51 @@ const styles = StyleSheet.create({
   roleText: {
     color: '#16A34A',
     fontWeight: '700',
+  },
+  roleContainer: {
+    marginBottom: 24,
+    padding: 16,
+    backgroundColor: 'white',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  roleTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 12,
+  },
+  roleButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  roleButton: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    backgroundColor: 'white',
+    alignItems: 'center',
+  },
+  roleButtonActive: {
+    borderColor: '#16A34A',
+    backgroundColor: '#F0FDF4',
+  },
+  roleButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  roleButtonTextActive: {
+    color: '#16A34A',
+  },
+  roleHint: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
   },
 });

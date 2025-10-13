@@ -1,15 +1,14 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../../constants/customerTheme';
 
 export default function CleanerTabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.role.cleaner,
-        tabBarInactiveTintColor: Colors.text.muted,
+  tabBarActiveTintColor: '#ffffff',
+  tabBarInactiveTintColor: '#bfbfbf',
         tabBarStyle: { height: 64, paddingBottom: 10, paddingTop: 6 },
         tabBarLabelStyle: { fontSize: 12 },
       }}

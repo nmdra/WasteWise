@@ -11,23 +11,37 @@ import { Calendar } from 'react-native-calendars';
 import AppHeader from '../../components/app-header';
 import { Colors } from '../../constants/customerTheme';
 
-// --- Mock Data for Time Slots ---
-// In a real app, this data would likely come from an API
-const timeSlotsData = {
-  '2024-03-17': [
-    { time: '09:00 AM', status: 'Available' },
-    { time: '10:00 AM', status: 'Booked' },
-    { time: '11:00 AM', status: 'Available' },
-    { time: '01:00 PM', status: 'Available' },
-    { time: '02:00 PM', status: 'Booked' },
-    { time: '03:00 PM', status: 'Available' },
-  ],
-  '2024-03-18': [
-    { time: '10:00 AM', status: 'Available' },
-    { time: '11:00 AM', status: 'Booked' },
-  ],
-  // Add more dates as needed
-};
+// --- Mock Data generator for Time Slots ---
+// Creates sample slots for today + next 3 days so calendar shows mock availability
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function generateMockSlots() {
+  const base = new Date();
+  const slots = {};
+  for (let i = 0; i < 4; i++) {
+    const day = new Date(base);
+    day.setDate(base.getDate() + i);
+    const key = isoDate(day);
+
+    // simple pattern: alternate booked/available slots
+    const daySlots = [
+      { time: '09:00 AM', status: i % 2 === 0 ? 'Available' : 'Booked' },
+      { time: '10:00 AM', status: 'Booked' },
+      { time: '11:00 AM', status: 'Available' },
+      { time: '01:00 PM', status: 'Available' },
+      { time: '02:00 PM', status: i % 3 === 0 ? 'Booked' : 'Available' },
+      { time: '03:00 PM', status: 'Available' },
+    ];
+
+    slots[key] = daySlots;
+  }
+
+  return slots;
+}
+
+const timeSlotsData = generateMockSlots();
 
 export default function Schedule() {
   // default to today (ISO yyyy-mm-dd)
@@ -58,13 +72,23 @@ export default function Schedule() {
                 setSelectedDate(day.dateString);
                 setSelectedTime(null);
               }}
-              markedDates={{
-                [selectedDate]: {
-                  selected: true,
-                  selectedColor: Colors.primary || '#16A34A',
-                  selectedTextColor: '#fff',
-                },
-              }}
+              // build markedDates from mock data: show a green dot for days with any Available slots
+              markedDates={(() => {
+                const md = {};
+                Object.keys(timeSlotsData).forEach((d) => {
+                  const slots = timeSlotsData[d] || [];
+                  const hasAvailable = slots.some((s) => s.status === 'Available');
+                  md[d] = {
+                    dots: hasAvailable ? [{ key: 'avail', color: Colors.primary || '#16A34A' }] : [{ key: 'booked', color: '#BDBDBD' }],
+                  };
+                });
+                // ensure selected date is marked as selected
+                md[selectedDate] = md[selectedDate] || { dots: [] };
+                md[selectedDate].selected = true;
+                md[selectedDate].selectedColor = Colors.primary || '#16A34A';
+                return md;
+              })()}
+              markingType={'multi-dot'}
               theme={{
                 arrowColor: Colors.primary || '#16A34A',
                 todayTextColor: Colors.primary || '#16A34A',
@@ -79,7 +103,6 @@ export default function Schedule() {
                 textMonthFontSize: 18,
                 textDayHeaderFontSize: 14,
               }}
-              markingType={'custom'}
             />
           </View>
 
