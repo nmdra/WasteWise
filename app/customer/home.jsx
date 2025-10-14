@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '../../config/firebase';
 import { useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../components/app-header';

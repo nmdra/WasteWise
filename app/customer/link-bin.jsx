@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '../../config/firebase';
 import { useState } from 'react';
 import {
   Alert,
@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import AppHeader from '../../components/app-header';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
-import { BIN_CATEGORIES, createBin } from '../../services/binService';
+import { BIN_CATEGORIES } from '../../constants/wasteTypes';
+import { createAndActivateBin } from '../../services/binService.optimized';
 
 export default function CreateBinScreen() {
   const router = useRouter();
@@ -38,17 +39,20 @@ export default function CreateBinScreen() {
     setSaving(true);
 
     try {
-      const result = await createBin({
-        userId: user.uid,
-        category: selectedCategory,
-        description: description.trim(),
-        location: location.trim(),
-      });
+      const result = await createAndActivateBin(
+        user.uid,
+        {
+          category: selectedCategory,
+          description: description.trim(),
+          location: location.trim(),
+        },
+        false // Don't auto-activate yet
+      );
 
       if (result.success) {
         Alert.alert(
           'Success!',
-          `Bin QR code created successfully!\n\nBin ID: ${result.binCode}`,
+          `Bin QR code created successfully!\n\nBin ID: ${result.bin.binId}`,
           [
             {
               text: 'View QR Code',

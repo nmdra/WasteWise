@@ -1,4 +1,4 @@
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '../../config/firebase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {

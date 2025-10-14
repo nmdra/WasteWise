@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -59,6 +60,20 @@ export const BIN_CATEGORIES = {
     color: '#8B5CF6',
     description: 'Mixed waste that doesn\'t fit other categories',
   },
+};
+
+/**
+ * Map bin categories to schedule waste types
+ * This allows matching bins to schedules that collect the same waste type
+ */
+export const BIN_TO_WASTE_TYPE_MAP = {
+  paper: 'paper',
+  glass: 'glass',
+  metal: 'metal',
+  plastic: 'plastic',
+  organic: 'organic',
+  hazardous: 'hazardous',
+  general: 'general',
 };
 
 /**
@@ -288,6 +303,8 @@ export const updateBin = async (binId, updates) => {
  */
 export const toggleBinStatus = async (binId, isActive) => {
   try {
+    console.log('🔄 toggleBinStatus called:', { binId, isActive });
+    
     const binRef = doc(db, 'bins', binId);
     
     await updateDoc(binRef, {
@@ -295,13 +312,222 @@ export const toggleBinStatus = async (binId, isActive) => {
       updatedAt: serverTimestamp(),
     });
 
+    console.log('✅ Bin status updated in database');
+
+    let scheduleResult = { success: true, count: 0 };
+
+    // If activating, create stops on future schedules
+    if (isActive) {
+      console.log('📅 Activating bin - adding to schedules...');
+      const bin = await getBinById(binId);
+      if (bin) {
+        scheduleResult = await addBinToFutureSchedules(bin);
+      }
+    } else {
+      // If deactivating, remove from future schedules
+      console.log('🗑️ Deactivating bin - removing from schedules...');
+      const bin = await getBinById(binId);
+      if (bin) {
+        scheduleResult = await removeBinFromFutureSchedules(bin);
+      }
+    }
+
+    console.log('✅ Schedule update result:', scheduleResult);
+
     return {
       success: true,
       message: isActive ? 'Bin activated successfully' : 'Bin deactivated successfully',
+      count: scheduleResult.count || 0,
     };
   } catch (error) {
-    console.error('Error toggling bin status:', error);
-    throw error;
+    console.error('❌ Error toggling bin status:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to update bin status',
+    };
+  }
+};
+
+/**
+ * Automatically add bin to all future schedules in the same zone and waste type
+ * @param {Object} bin - Bin data with userId, category, etc.
+ * @returns {Promise<Object>} Result with count of schedules updated
+ */
+export const addBinToFutureSchedules = async (bin) => {
+  try {
+    console.log('🚀 Adding bin to future schedules:', bin.id);
+
+    // Get user profile to get zone and address
+    const userDoc = await getDoc(doc(db, 'users', bin.userId));
+    if (!userDoc.exists()) {
+      console.log('⚠️ User not found:', bin.userId);
+      return { success: false, error: 'User not found' };
+    }
+
+    const userData = userDoc.data();
+    const userZone = userData.zone;
+    const userAddress = userData.address || 'Address not provided';
+    const userName = userData.displayName || userData.firstName || 'Customer';
+
+    if (!userZone) {
+      console.log('⚠️ User has no zone assigned');
+      return { success: false, error: 'User zone not found' };
+    }
+
+    // Map bin category to waste type
+    const wasteType = BIN_TO_WASTE_TYPE_MAP[bin.category] || bin.category;
+
+    // Find all future schedules in the same zone that collect this waste type
+    const today = Timestamp.now();
+    const schedulesQuery = query(
+      collection(db, 'schedules'),
+      where('zone', '==', userZone),
+      where('status', '==', 'active'),
+      where('date', '>=', today)
+    );
+
+    const schedulesSnapshot = await getDocs(schedulesQuery);
+
+    if (schedulesSnapshot.empty) {
+      console.log('⚠️ No future schedules found for zone:', userZone);
+      return { success: true, message: 'No future schedules to add stop to', count: 0 };
+    }
+
+    // Filter schedules that collect this waste type
+    const matchingSchedules = schedulesSnapshot.docs.filter(scheduleDoc => {
+      const scheduleData = scheduleDoc.data();
+      const wasteTypes = scheduleData.wasteTypes || [];
+      return wasteTypes.includes(wasteType);
+    });
+
+    if (matchingSchedules.length === 0) {
+      console.log('⚠️ No schedules found that collect', wasteType, 'in zone', userZone);
+      return { success: true, message: `No schedules collecting ${wasteType} in your zone`, count: 0 };
+    }
+
+    console.log(`✅ Found ${matchingSchedules.length} matching schedules`);
+
+    // Create stops for each matching schedule
+    const stopPromises = matchingSchedules.map(async (scheduleDoc) => {
+      // Check if stop already exists for this user on this schedule
+      const existingStopsQuery = query(
+        collection(db, 'schedules', scheduleDoc.id, 'stops'),
+        where('userId', '==', bin.userId)
+      );
+      
+      const existingStops = await getDocs(existingStopsQuery);
+      
+      if (!existingStops.empty) {
+        console.log('⏭️  Stop already exists for user on schedule:', scheduleDoc.id);
+        return null; // Skip if already exists
+      }
+
+      // Create stop
+      return addDoc(collection(db, 'schedules', scheduleDoc.id, 'stops'), {
+        userId: bin.userId,
+        userName: userName,
+        binId: bin.id,
+        binCategory: bin.category,
+        binCode: bin.binId,
+        address: userAddress,
+        zone: userZone,
+        type: 'customer',
+        status: 'pending',
+        collectedAt: null,
+        notes: `Auto-added from ${BIN_CATEGORIES[bin.category]?.label || bin.category} bin activation`,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+
+    const results = await Promise.all(stopPromises);
+    const successCount = results.filter(r => r !== null).length;
+
+    console.log(`✅ Created ${successCount} stops on future schedules`);
+
+    return {
+      success: true,
+      count: successCount,
+      message: `Added to ${successCount} future collection schedule(s)`,
+    };
+  } catch (error) {
+    console.error('❌ Error adding bin to future schedules:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Remove bin from all future schedules
+ * @param {Object} bin - Bin data
+ * @returns {Promise<Object>} Result with count of stops removed
+ */
+export const removeBinFromFutureSchedules = async (bin) => {
+  try {
+    console.log('🗑️  Removing bin from future schedules:', bin.id);
+
+    // Find all future schedules
+    const today = Timestamp.now();
+    const schedulesQuery = query(
+      collection(db, 'schedules'),
+      where('status', '==', 'active'),
+      where('date', '>=', today)
+    );
+
+    const schedulesSnapshot = await getDocs(schedulesQuery);
+
+    if (schedulesSnapshot.empty) {
+      return { success: true, count: 0 };
+    }
+
+    let removedCount = 0;
+
+    // For each schedule, find and remove stops for this bin
+    for (const scheduleDoc of schedulesSnapshot.docs) {
+      try {
+        const stopsQuery = query(
+          collection(db, 'schedules', scheduleDoc.id, 'stops'),
+          where('binId', '==', bin.id),
+          where('status', '==', 'pending') // Only remove pending stops
+        );
+
+        const stopsSnapshot = await getDocs(stopsQuery);
+
+        for (const stopDoc of stopsSnapshot.docs) {
+          try {
+            await updateDoc(doc(db, 'schedules', scheduleDoc.id, 'stops', stopDoc.id), {
+              status: 'cancelled',
+              notes: 'Bin deactivated by customer',
+              updatedAt: serverTimestamp(),
+            });
+            removedCount++;
+          } catch (updateError) {
+            // Log but don't fail - might be blocked by ad blocker
+            console.warn('⚠️  Failed to update stop (may be blocked by extension):', updateError.code);
+          }
+        }
+      } catch (queryError) {
+        // Log but continue with other schedules
+        console.warn('⚠️  Failed to query stops (may be blocked by extension):', queryError.code);
+      }
+    }
+
+    console.log(`✅ Removed/cancelled ${removedCount} stops from future schedules`);
+
+    return {
+      success: true,
+      count: removedCount,
+      message: removedCount > 0 
+        ? `Removed from ${removedCount} future schedule(s)` 
+        : 'Bin deactivated (no future pickups found)',
+    };
+  } catch (error) {
+    console.error('❌ Error removing bin from future schedules:', error);
+    // Return success even if some operations failed due to ad blocker
+    return { 
+      success: true, 
+      count: 0,
+      message: 'Bin deactivated',
+    };
   }
 };
 

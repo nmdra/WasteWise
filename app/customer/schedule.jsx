@@ -1,4 +1,4 @@
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '../../config/firebase';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,

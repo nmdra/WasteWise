@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, ScrollView, Share, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useRef } from 'react';
+import { Alert, ScrollView, Share, StyleSheet, Text, View, ActivityIndicator, Platform } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import AppHeader from '../../components/app-header';
 import Button from '../../components/customer/Button';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
-import { getBinById, BIN_CATEGORIES } from '../../services/binService';
+import { getBinById, BIN_CATEGORIES } from '../../services/binService.optimized';
 
 export default function MyQR() {
   const router = useRouter();
@@ -16,7 +18,7 @@ export default function MyQR() {
   const [userId, setUserId] = useState('');
   const [bin, setBin] = useState(null);
   const [loading, setLoading] = useState(true);
-  let qrRef = null;
+  const qrRef = useRef(null);
 
   useEffect(() => {
     loadBinData();
@@ -73,13 +75,48 @@ export default function MyQR() {
 
   const handleShare = async () => {
     try {
-      const binInfo = bin ? `\nBin: ${bin.category} (${binId})` : '';
-      await Share.share({
-        message: `My WasteWise QR Code\nAccount ID: ${userId}${binInfo}\nNonce: ${nonce}`,
-        title: 'Share QR Code',
+      if (!qrRef.current) {
+        Alert.alert('Error', 'QR code not ready. Please try again.');
+        return;
+      }
+
+      // Get QR code as base64
+      qrRef.current.toDataURL(async (dataURL) => {
+        try {
+          const binInfo = bin ? `${BIN_CATEGORIES[bin.category]?.label || bin.category} Bin` : 'Account';
+          const filename = `WasteWise_QR_${binInfo.replace(/\s/g, '_')}_${Date.now()}.png`;
+          const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+          // Write base64 to file
+          await FileSystem.writeAsStringAsync(fileUri, dataURL, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          // Check if sharing is available
+          const isAvailable = await Sharing.isAvailableAsync();
+          
+          if (isAvailable) {
+            await Sharing.shareAsync(fileUri, {
+              mimeType: 'image/png',
+              dialogTitle: 'Share QR Code',
+              UTI: 'public.png',
+            });
+          } else {
+            // Fallback to text sharing
+            const binDetails = bin ? `\nBin: ${bin.category} (${binId})` : '';
+            await Share.share({
+              message: `My WasteWise QR Code\nAccount ID: ${userId}${binDetails}\nNonce: ${nonce}`,
+              title: 'Share QR Code',
+            });
+          }
+        } catch (error) {
+          console.error('Error sharing QR code:', error);
+          Alert.alert('Error', 'Failed to share QR code');
+        }
       });
     } catch (error) {
       console.error('Error sharing:', error);
+      Alert.alert('Error', 'Failed to share QR code');
     }
   };
 
@@ -166,7 +203,7 @@ export default function MyQR() {
                   size={240}
                   color={Colors.text.primary}
                   backgroundColor={Colors.bg.card}
-                  getRef={(ref) => (qrRef = ref)}
+                  getRef={(ref) => (qrRef.current = ref)}
                 />
               ) : (
                 <View style={styles.qrPlaceholder}>

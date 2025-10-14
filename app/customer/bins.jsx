@@ -1,25 +1,31 @@
 import { useRouter } from 'expo-router';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '../../config/firebase';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../../components/app-header';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
+import { BIN_CATEGORIES } from '../../constants/wasteTypes';
 import {
-  BIN_CATEGORIES,
   getUserBins,
-  getUserBinStats,
+  calculateBinStats,
   subscribeToUserBins,
   toggleBinStatus,
-} from '../../services/binService';
+  deleteBinCompletely,
+  getUserActiveBins,
+  addBinToSchedules,
+} from '../../services/binService.optimized';
 
 export default function BinsScreen() {
   const router = useRouter();
@@ -31,13 +37,23 @@ export default function BinsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all'); // all, active, inactive
+  const [togglingBinId, setTogglingBinId] = useState(null); // Track which bin is being toggled
+  const [navigatingBinId, setNavigatingBinId] = useState(null); // Track which bin is navigating to QR
+  const [confirmDialog, setConfirmDialog] = useState(null); // For web-compatible confirmation
 
   useEffect(() => {
     if (user) {
       loadBins();
-      loadStats();
     }
   }, [user]);
+
+  // Recalculate stats whenever bins change
+  useEffect(() => {
+    if (bins.length > 0) {
+      const binStats = calculateBinStats(bins);
+      setStats(binStats);
+    }
+  }, [bins]);
 
   const loadBins = async () => {
     if (!user) return;
@@ -65,35 +81,113 @@ export default function BinsScreen() {
     if (!user) return;
 
     try {
-      const binStats = await getUserBinStats(user.uid);
+      // Calculate stats from existing bins data
+      const binStats = calculateBinStats(bins);
       setStats(binStats);
     } catch (error) {
       console.error('Error loading stats:', error);
     }
   };
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
+    if (!user) return;
+    
     setRefreshing(true);
-    loadBins();
-    loadStats();
-  };
-
-  const handleToggleStatus = async (binId, currentStatus) => {
     try {
-      await toggleBinStatus(binId, !currentStatus);
-      Alert.alert(
-        'Success',
-        `Bin ${!currentStatus ? 'activated' : 'deactivated'} successfully`
-      );
-      loadStats(); // Refresh stats
+      const activeBins = await getUserActiveBins(user.uid);
+      
+      if (activeBins.length > 0) {
+        let totalAdded = 0;
+        for (const bin of activeBins) {
+          const result = await addBinToSchedules(bin.id);
+          if (result.success && result.count > 0) {
+            totalAdded += result.count;
+          }
+        }
+        
+        if (totalAdded > 0) {
+          Alert.alert('Schedules Updated!', `Added ${totalAdded} stops to schedules`);
+        }
+      }
+      
+      await loadBins();
     } catch (error) {
-      console.error('Error toggling bin status:', error);
-      Alert.alert('Error', 'Failed to update bin status');
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
+  const handleToggleStatus = async (binId, currentStatus, binData) => {
+    console.log('🔄 Toggle status clicked:', { binId, currentStatus, binData });
+    
+    // Prevent multiple clicks
+    if (togglingBinId) {
+      console.log('⚠️ Already processing another bin, ignoring click');
+      return;
+    }
+    
+    const action = !currentStatus ? 'activate' : 'deactivate';
+    const actionTitle = !currentStatus ? 'Activate Bin' : 'Deactivate Bin';
+    const actionMessage = !currentStatus 
+      ? 'Activating this bin will automatically add you to all future collection schedules in your zone for this waste type.'
+      : 'Deactivating this bin will remove you from future collection schedules.';
+
+    console.log('📢 Showing confirmation dialog...');
+    console.log('📋 Dialog config:', { actionTitle, action, binId });
+    
+    // Web-compatible confirmation dialog
+    setConfirmDialog({
+      title: actionTitle,
+      message: actionMessage,
+      action: action,
+      binId: binId,
+      currentStatus: currentStatus,
+      onConfirm: async () => {
+        console.log('✅ User confirmed:', action);
+        console.log('🎯 About to call toggleBinStatus with:', { binId, newStatus: !currentStatus });
+        setConfirmDialog(null);
+        setTogglingBinId(binId);
+        
+        try {
+          console.log('🚀 Calling toggleBinStatus...', binId, !currentStatus);
+          const result = await toggleBinStatus(binId, !currentStatus);
+          console.log('📊 Result:', result);
+          
+          if (result.success) {
+            let message = result.message;
+            if (result.count !== undefined) {
+              message += `\n\n📅 ${result.count > 0 ? `Added to ${result.count} future schedule(s)` : 'No matching schedules found yet'}`;
+            }
+            
+            alert('Success! 🎉\n' + message);
+            await loadBins();
+          } else {
+            alert('Error: ' + (result.error || 'Failed to update bin status'));
+          }
+        } catch (error) {
+          console.error('❌ Error toggling bin status:', error);
+          alert('Error: ' + (error.message || 'Failed to update bin status'));
+        } finally {
+          console.log('🏁 Finished processing, resetting state');
+          setTogglingBinId(null);
+        }
+      },
+      onCancel: () => {
+        console.log('❌ User cancelled');
+        setConfirmDialog(null);
+        setTogglingBinId(null);
+      }
+    });
+  };
+
   const handleBinPress = (bin) => {
-    router.push(`/customer/qr?binId=${bin.id}`);
+    setNavigatingBinId(bin.id);
+    // Small delay to show the loading state before navigation
+    setTimeout(() => {
+      router.push(`/customer/qr?binId=${bin.id}`);
+      setNavigatingBinId(null);
+    }, 100);
   };
 
   const filteredBins = bins.filter((bin) => {
@@ -105,6 +199,9 @@ export default function BinsScreen() {
 
   const renderBinCard = ({ item: bin }) => {
     const categoryInfo = BIN_CATEGORIES[bin.category] || BIN_CATEGORIES.general;
+    const isToggling = togglingBinId === bin.id;
+    const isNavigating = navigatingBinId === bin.id;
+    const isAnyActionRunning = isToggling || isNavigating;
 
     return (
       <TouchableOpacity
@@ -114,6 +211,7 @@ export default function BinsScreen() {
         ]}
         onPress={() => handleBinPress(bin)}
         activeOpacity={0.7}
+        disabled={isAnyActionRunning}
       >
         <View style={styles.binHeader}>
           <View style={[styles.categoryIcon, { backgroundColor: categoryInfo.color }]}>
@@ -160,22 +258,46 @@ export default function BinsScreen() {
 
         <View style={styles.binActions}>
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[
+              styles.actionButton,
+              isNavigating && styles.buttonDisabled,
+            ]}
             onPress={() => handleBinPress(bin)}
+            disabled={isAnyActionRunning}
           >
-            <Text style={styles.actionButtonText}>View QR Code</Text>
+            {isNavigating ? (
+              <View style={styles.buttonContent}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={[styles.actionButtonText, styles.buttonTextWithSpinner]}>
+                  Opening...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.actionButtonText}>View QR Code</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.actionButton,
               styles.toggleButton,
               !bin.isActive && styles.activateButton,
+              isToggling && styles.buttonDisabled,
             ]}
-            onPress={() => handleToggleStatus(bin.id, bin.isActive)}
+            onPress={() => handleToggleStatus(bin.id, bin.isActive, bin)}
+            disabled={isAnyActionRunning}
           >
-            <Text style={styles.actionButtonText}>
-              {bin.isActive ? 'Deactivate' : 'Activate'}
-            </Text>
+            {isToggling ? (
+              <View style={styles.buttonContent}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={[styles.actionButtonText, styles.buttonTextWithSpinner]}>
+                  Processing...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.actionButtonText}>
+                {bin.isActive ? 'Deactivate' : 'Activate'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -199,8 +321,17 @@ export default function BinsScreen() {
       <AppHeader />
 
       <View style={styles.header}>
-        <Text style={styles.title}>My Bins</Text>
-        <Text style={styles.subtitle}>Manage your waste bin QR codes</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>My Bins</Text>
+          <Text style={styles.subtitle}>Manage your waste bin QR codes</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.headerRefresh}
+          onPress={onRefresh}
+          disabled={refreshing}
+        >
+          <Ionicons name="refresh" size={22} color={refreshing ? Colors.text.secondary : Colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {/* Stats Section */}
@@ -298,6 +429,41 @@ export default function BinsScreen() {
         >
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
+      )}
+
+      {/* Web-Compatible Confirmation Modal */}
+      {confirmDialog && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => confirmDialog.onCancel()}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{confirmDialog.title}</Text>
+              <Text style={styles.modalMessage}>{confirmDialog.message}</Text>
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={confirmDialog.onCancel}
+                >
+                  <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonConfirm]}
+                  onPress={confirmDialog.onConfirm}
+                >
+                  <Text style={styles.modalButtonTextConfirm}>
+                    {confirmDialog.action === 'activate' ? 'Activate' : 'Deactivate'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
     </View>
   );
@@ -443,13 +609,23 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     marginBottom: Spacing.sm,
     fontStyle: 'italic',
-  },
-  binInfo: {
+    padding: Spacing.lg,
+    paddingTop: Spacing.lg,
+    backgroundColor: Colors.bg.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.line,
+    marginBottom: Spacing.md,
     flexDirection: 'row',
-    paddingVertical: Spacing.xs,
-  },
-  binInfoLabel: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
     fontSize: FontSizes.body,
+  headerLeft: {
+    flexDirection: 'column',
+  },
+  headerRefresh: {
+    padding: 8,
+    borderRadius: 8,
+  },
     color: Colors.text.secondary,
     width: 120,
   },
@@ -476,6 +652,17 @@ const styles = StyleSheet.create({
   },
   activateButton: {
     backgroundColor: Colors.state.success,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  buttonTextWithSpinner: {
+    marginLeft: 4,
   },
   actionButtonText: {
     fontSize: FontSizes.body,
@@ -535,5 +722,66 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#fff',
     fontWeight: '700',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: Radii.lg,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: FontSizes.h2,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.xl,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  modalButton: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: Radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#E5E7EB',
+  },
+  modalButtonConfirm: {
+    backgroundColor: Colors.primary,
+  },
+  modalButtonTextCancel: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  modalButtonTextConfirm: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

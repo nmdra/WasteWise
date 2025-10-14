@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '../../../config/firebase';
 import { useState } from 'react';
 import {
     ActivityIndicator,
@@ -16,17 +16,12 @@ import AppHeader from '../../../components/app-header';
 import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
 import { createSchedule } from '../../../services/scheduleService';
 import { createMainStopsForSchedule } from '../../../services/stopsService';
+import { WASTE_TYPE_LIST } from '../../../constants/wasteTypes';
 
 const ZONES = ['A', 'B', 'C', 'D', 'E'];
 
-const WASTE_TYPES = [
-  { id: 'plastic', label: 'Plastic', icon: '♻️' },
-  { id: 'paper', label: 'Paper', icon: '📄' },
-  { id: 'organic', label: 'Organic', icon: '🥬' },
-  { id: 'glass', label: 'Glass', icon: '🫙' },
-  { id: 'metal', label: 'Metal', icon: '🔩' },
-  { id: 'other', label: 'Other', icon: '🗑️' },
-];
+// Use common waste types configuration
+const WASTE_TYPES = WASTE_TYPE_LIST;
 
 export default function ManageSchedule() {
   const router = useRouter();

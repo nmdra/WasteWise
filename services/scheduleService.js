@@ -1,16 +1,17 @@
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    onSnapshot,
-    orderBy,
-    query,
-    Timestamp,
-    updateDoc,
-    where,
+  addDoc,
+  collection,
+  collectionGroup,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  Timestamp,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -456,4 +457,262 @@ export function formatScheduleDate(dateString) {
  */
 export function formatTimeRange(timeRange) {
   return `${timeRange.start} - ${timeRange.end}`;
+}
+
+/**
+ * Get schedules for user's bins by checking stops subcollection
+ */
+export async function getSchedulesForUserBins(userId, onlyActive = false) {
+  try {
+    console.log('🔍 Getting schedules for user bins:', userId);
+    // Build bins query - optionally include only active bins
+    let binsQuery;
+    if (onlyActive) {
+      binsQuery = query(
+        collection(db, 'bins'),
+        where('userId', '==', userId),
+        where('isActive', '==', true)
+      );
+    } else {
+      binsQuery = query(
+        collection(db, 'bins'),
+        where('userId', '==', userId)
+      );
+    }
+
+    const binsSnapshot = await getDocs(binsQuery);
+
+    if (binsSnapshot.empty) {
+      return [];
+    }
+
+    const activeBins = binsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    const schedulesMap = new Map();
+    const today = Timestamp.now();
+
+    for (const bin of activeBins) {
+      const schedulesQuery = query(
+        collection(db, 'schedules'),
+        where('status', '==', 'active'),
+        where('date', '>=', today),
+        orderBy('date', 'asc')
+      );
+
+      const schedulesSnapshot = await getDocs(schedulesQuery);
+
+      for (const scheduleDoc of schedulesSnapshot.docs) {
+        const scheduleId = scheduleDoc.id;
+
+        const stopsQuery = query(
+          collection(db, 'schedules', scheduleId, 'stops'),
+          where('binId', '==', bin.id),
+          where('status', '==', 'pending')
+        );
+
+        const stopsSnapshot = await getDocs(stopsQuery);
+
+        if (!stopsSnapshot.empty) {
+          const scheduleData = scheduleDoc.data();
+          
+          // Handle both old and new stop formats
+          const stopDocData = stopsSnapshot.docs[0].data();
+          let stopData;
+          
+          if (stopDocData.bins && Array.isArray(stopDocData.bins)) {
+            // New format: find the specific bin in the array
+            const binInStop = stopDocData.bins.find(b => b.binId === bin.id);
+            if (binInStop) {
+              stopData = {
+                ...stopDocData,
+                binId: binInStop.binId,
+                binCode: binInStop.binCode,
+                binCategory: binInStop.binCategory,
+                wasteType: binInStop.wasteType,
+              };
+            } else {
+              continue; // Bin not found in this stop
+            }
+          } else {
+            // Old format: single bin
+            stopData = stopDocData;
+          }
+          
+          // Handle different date formats (Timestamp, Date, or string)
+          let scheduleDate = null;
+          if (scheduleData.date) {
+            if (scheduleData.date.toDate && typeof scheduleData.date.toDate === 'function') {
+              // Firestore Timestamp
+              scheduleDate = scheduleData.date.toDate();
+            } else if (scheduleData.date instanceof Date) {
+              // Already a Date object
+              scheduleDate = scheduleData.date;
+            } else if (typeof scheduleData.date === 'string') {
+              // Date string
+              scheduleDate = new Date(scheduleData.date);
+            }
+          }
+          
+          schedulesMap.set(bin.id, {
+            binId: bin.id,
+            binCode: bin.binId,
+            category: bin.category,
+            categoryLabel: bin.category,
+            icon: '🗑️',
+            color: '#6B7280',
+            schedule: {
+              scheduleId: scheduleId,
+              date: scheduleDate,
+              timeRanges: scheduleData.timeRanges || [],
+              collectorName: scheduleData.collectorName || 'Collector',
+              zone: scheduleData.zone,
+              availableSlots: scheduleData.availableSlots || 0,
+              totalSlots: scheduleData.totalSlots || 0,
+              wasteTypes: scheduleData.wasteTypes || [],
+              stopId: stopsSnapshot.docs[0].id,
+              stopStatus: stopData.status,
+              stopAddress: stopData.address,
+            },
+          });
+
+          break;
+        }
+      }
+
+      if (!schedulesMap.has(bin.id)) {
+        schedulesMap.set(bin.id, {
+          binId: bin.id,
+          binCode: bin.binId,
+          category: bin.category,
+          categoryLabel: bin.category,
+          icon: '🗑️',
+          color: '#6B7280',
+          schedule: null,
+        });
+      }
+    }
+
+    return Array.from(schedulesMap.values());
+  } catch (error) {
+    console.error('Error getting schedules for bins:', error);
+    return [];
+  }
+}
+
+/**
+ * Get upcoming schedules that have stops assigned to the user.
+ * Searches stops subcollection across all schedules where userId matches.
+ * Returns an array of schedule objects with aggregated stops belonging to the user.
+ */
+export async function getSchedulesForUser(userId) {
+  try {
+    console.log('🔍 Fetching schedules for user:', userId);
+    
+    const scheduleMap = new Map();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Use collectionGroup to find stops where userId matches
+    const stopsQuery = query(
+      collectionGroup(db, 'stops'),
+      where('userId', '==', userId),
+      where('status', '==', 'pending')
+    );
+
+    const stopsSnapshot = await getDocs(stopsQuery);
+    console.log('📍 Found', stopsSnapshot.size, 'pending stops for user');
+
+    for (const stopDoc of stopsSnapshot.docs) {
+      // stopDoc.ref.parent.parent is the schedule document reference
+      const scheduleRef = stopDoc.ref.parent.parent;
+      if (!scheduleRef) continue;
+      const scheduleId = scheduleRef.id;
+
+      // Fetch schedule document if not already in map
+      if (!scheduleMap.has(scheduleId)) {
+        const scheduleSnap = await getDoc(scheduleRef);
+        if (!scheduleSnap.exists()) continue;
+        // Only include upcoming schedules (today or future)
+        const scheduleData = scheduleSnap.data();
+        
+        // Handle different date formats (Timestamp, Date, or string)
+        let scheduleDate = null;
+        if (scheduleData.date) {
+          if (scheduleData.date.toDate && typeof scheduleData.date.toDate === 'function') {
+            // Firestore Timestamp
+            scheduleDate = scheduleData.date.toDate();
+          } else if (scheduleData.date instanceof Date) {
+            // Already a Date object
+            scheduleDate = scheduleData.date;
+          } else if (typeof scheduleData.date === 'string') {
+            // Date string
+            scheduleDate = new Date(scheduleData.date);
+          }
+        }
+        
+        if (scheduleDate && scheduleDate >= today) {
+          scheduleMap.set(scheduleId, {
+            scheduleId,
+            date: scheduleDate,
+            timeRanges: scheduleData.timeRanges || [],
+            collectorName: scheduleData.collectorName || 'Collector',
+            zone: scheduleData.zone || 'Unknown',
+            availableSlots: scheduleData.availableSlots || 0,
+            totalSlots: scheduleData.totalSlots || 0,
+            wasteTypes: scheduleData.wasteTypes || [],
+            status: scheduleData.status,
+            stops: [],
+          });
+        }
+      }
+
+      // Add stop to the schedule entry
+      if (scheduleMap.has(scheduleId)) {
+        const entry = scheduleMap.get(scheduleId);
+        const stopData = stopDoc.data();
+        
+        // Handle both old single-bin format and new multi-bin format
+        if (stopData.bins && Array.isArray(stopData.bins)) {
+          // New format: bins is an array
+          entry.stops.push(...stopData.bins.map(bin => ({
+            stopId: stopDoc.id,
+            binId: bin.binId,
+            binCode: bin.binCode,
+            binCategory: bin.binCategory,
+            address: stopData.address,
+            status: stopData.status,
+            wasteType: bin.wasteType,
+          })));
+        } else {
+          // Old format: single bin fields (for backwards compatibility)
+          entry.stops.push({
+            stopId: stopDoc.id,
+            binId: stopData.binId,
+            binCode: stopData.binCode,
+            binCategory: stopData.binCategory,
+            address: stopData.address,
+            status: stopData.status,
+            wasteType: stopData.wasteType,
+          });
+        }
+      }
+    }
+
+    const schedules = Array.from(scheduleMap.values());
+    
+    // Sort by date ascending (closest first)
+    schedules.sort((a, b) => {
+      if (!a.date || !b.date) return 0;
+      return a.date - b.date;
+    });
+
+    console.log('✅ Returning', schedules.length, 'upcoming schedules');
+    return schedules;
+  } catch (error) {
+    console.error('❌ Error getting user schedules:', error);
+    return [];
+  }
 }
