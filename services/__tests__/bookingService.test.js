@@ -5,10 +5,10 @@
  */
 
 import {
-  formatDateRange,
-  isDateInRange,
-  getStatusColor,
-  getStatusIcon,
+    formatDateRange,
+    getStatusColor,
+    getStatusIcon,
+    isDateInRange,
 } from '../bookingService';
 
 describe('Booking Service - Date Utilities', () => {

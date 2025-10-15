@@ -1,15 +1,13 @@
 import {
-  createMainStop,
-  createCustomerStop,
-  createMainStopsForSchedule,
-  getStopsBySchedule,
-  subscribeToStopsBySchedule,
-  getStopStats,
-  markStopAsCollected,
-  markStopAsSkipped,
-  updateStop,
-  deleteStop,
-  deleteStopsBySchedule,
+    createMainStop,
+    createMainStopsForSchedule,
+    deleteStop,
+    getStopsBySchedule,
+    getStopStats,
+    markStopAsCollected,
+    markStopAsSkipped,
+    subscribeToStopsBySchedule,
+    updateStop
 } from '../stopsService';
 
 describe('stopsService', () => {

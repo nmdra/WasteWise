@@ -27,6 +27,6 @@ const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 // Export auth instance and services
-export { auth, db, storage, googleProvider, onAuthStateChanged, getAuth };
+export { auth, db, getAuth, googleProvider, onAuthStateChanged, storage };
 
 export default app;

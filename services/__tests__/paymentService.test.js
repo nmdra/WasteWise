@@ -5,12 +5,12 @@
  */
 
 import {
-  detectCardType,
-  validateCardNumber,
-  validateExpiryDate,
-  validateCVV,
-  formatCardNumber,
-  processPayment,
+    detectCardType,
+    formatCardNumber,
+    processPayment,
+    validateCardNumber,
+    validateCVV,
+    validateExpiryDate,
 } from '../paymentService';
 
 describe('Payment Service - Card Validation', () => {

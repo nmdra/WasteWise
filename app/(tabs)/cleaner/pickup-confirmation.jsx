@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Platform } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { getBinById, getBinWithOwner, toggleBinStatus } from '../../../services/binService';
-import { getUserProfile } from '../../../services/userService';
-import { collectionService } from '../../../services/collectionService';
-import { auth } from '../../../config/firebase';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
 import StatusChip from '../../../components/cleaner/StatusChip';
+import { auth } from '../../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
+import { getBinWithOwner, toggleBinStatus } from '../../../services/binService';
+import { collectionService } from '../../../services/collectionService';
 
 export default function PickupConfirmation() {
   const router = useRouter();

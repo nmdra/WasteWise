@@ -1,8 +1,7 @@
 import {
-  getUpcomingPickups,
-  refreshPickupSchedules,
+    getUpcomingPickups,
+    refreshPickupSchedules,
 } from '../pickupService';
-import { db } from '../../config/firebase';
 
 describe('pickupService', () => {
   beforeEach(() => {

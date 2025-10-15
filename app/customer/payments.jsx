@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  RefreshControl,
   Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../../config/firebase';
+import { calculateMonthlyBill, formatCurrency } from '../../constants/paymentConfig';
 import { paymentService } from '../../services/paymentService';
-import { formatCurrency, calculateMonthlyBill } from '../../constants/paymentConfig';
 
 export default function Payments() {
   const router = useRouter();

@@ -5,8 +5,15 @@ export const Colors = {
     green: '#16A34A',
     teal: '#0F766E',
     lime: '#22C55E',
+    blue: '#2563EB',
+    orange: '#F97316',
     lightGreen: '#DCFCE7',
+    lightTeal: '#CCFBF1',
+    lightBlue: '#DBEAFE',
   },
+  
+  // Primary color (used for main actions)
+  primary: '#0F766E',
   
   // Role-specific
   role: {
@@ -53,6 +60,7 @@ export const Radii = {
   card: 16,
   btn: 14,
   chip: 999,
+  pill: 999,
   small: 8,
 };
 

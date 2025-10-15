@@ -1,5 +1,5 @@
-import { collection, addDoc, updateDoc, doc, query, where, getDocs, Timestamp, increment, orderBy, limit } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { addDoc, collection, doc, getDocs, increment, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 
 /**
  * Collection Service for managing waste collection records

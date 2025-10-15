@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
-import { getAuth } from '../../config/firebase';
 import { useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../components/app-header';
 import ListItem from '../../components/customer/ListItem';
+import { getAuth } from '../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 import { getUserProfile } from '../../services/auth';
 import { MockCustomer } from '../../services/mockCustomerApi';
-import { formatScheduleDate, formatTimeRange, getNextSchedule, wasteTypeIcons } from '../../services/scheduleService';
+import { formatScheduleDate, formatTimeRange, wasteTypeIcons, getSchedulesForUser } from '../../services/scheduleService';
 
 export default function CustomerHome() {
   const router = useRouter();
@@ -20,6 +20,8 @@ export default function CustomerHome() {
   const [userInfo, setUserInfo] = useState({ name: '', role: 'customer', zone: 'A' });
   const [nextSchedule, setNextSchedule] = useState(null);
   const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [userSchedules, setUserSchedules] = useState([]);
+  const [nextPickup, setNextPickup] = useState(null);
 
   const loadData = async () => {
     try {
@@ -80,16 +82,71 @@ export default function CustomerHome() {
     }
   };
 
+  const loadUserSchedules = async () => {
+    try {
+      if (!user) return;
+      
+      const schedules = await getSchedulesForUser(user.uid);
+      setUserSchedules(schedules);
+      
+      // Find the next upcoming pickup
+      const now = new Date();
+      let nextPickupData = null;
+      
+      for (const schedule of schedules) {
+        if (!schedule.date) continue;
+        
+        const scheduleDate = new Date(schedule.date);
+        if (scheduleDate >= now) {
+          // This is an upcoming schedule, find the first stop for this user
+          if (schedule.stops && schedule.stops.length > 0) {
+            const userStop = schedule.stops[0]; // Assuming first stop is for this user
+            
+            nextPickupData = {
+              date: schedule.date,
+              wasteTypes: schedule.wasteTypes || [],
+              etaMinutes: calculateETA(scheduleDate),
+              scheduleId: schedule.scheduleId,
+              stopId: userStop.stopId,
+              binCode: userStop.binCode,
+              collectorName: schedule.collectorName
+            };
+            break; // Found the next pickup, stop searching
+          }
+        }
+      }
+      
+      setNextPickup(nextPickupData);
+    } catch (error) {
+      console.error('Error loading user schedules:', error);
+    }
+  };
+
+  const calculateETA = (scheduleDate) => {
+    const now = new Date();
+    const diffMs = scheduleDate - now;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    
+    if (diffMinutes <= 0) return 0;
+    if (diffMinutes < 60) return diffMinutes;
+    
+    // For schedules more than an hour away, show approximate time
+    const diffHours = Math.floor(diffMinutes / 60);
+    return diffHours * 60; // Convert back to minutes for display
+  };
+
   useEffect(() => {
     loadData();
     loadUserInfo();
     loadNextSchedule();
+    loadUserSchedules();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadData();
     loadNextSchedule();
+    loadUserSchedules();
   };
 
   if (loading) {
@@ -177,19 +234,42 @@ export default function CustomerHome() {
         {/* Next Pickup Card */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Next Pickup</Text>
-          <View style={styles.pickupCard}>
-            <View style={styles.pickupHeader}>
-              <View>
-                <Text style={styles.pickupDate}>{formatDate(data?.nextPickup?.date)}</Text>
-                <Text style={styles.pickupTypes}>
-                  {data?.nextPickup?.wasteTypes?.join(' • ')}
-                </Text>
+          {nextPickup ? (
+            <View style={styles.pickupCard}>
+              <View style={styles.pickupHeader}>
+                <View>
+                  <Text style={styles.pickupDate}>{formatDate(nextPickup.date)}</Text>
+                  <Text style={styles.pickupTypes}>
+                    {nextPickup.wasteTypes?.join(' • ') || 'General Waste'}
+                  </Text>
+                  {nextPickup.binCode && (
+                    <Text style={styles.binCode}>Bin: {nextPickup.binCode}</Text>
+                  )}
+                </View>
+                <View style={styles.etaBadge}>
+                  <Text style={styles.etaText}>
+                    {nextPickup.etaMinutes === 0 ? 'Now' : 
+                     nextPickup.etaMinutes < 60 ? `${nextPickup.etaMinutes} min` : 
+                     `${Math.floor(nextPickup.etaMinutes / 60)}h ${nextPickup.etaMinutes % 60}m`}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.etaBadge}>
-                <Text style={styles.etaText}>ETA {data?.nextPickup?.etaMinutes} min</Text>
-              </View>
+              {nextPickup.collectorName && (
+                <View style={styles.collectorInfo}>
+                  <Text style={styles.collectorText}>
+                    Collector: {nextPickup.collectorName}
+                  </Text>
+                </View>
+              )}
             </View>
-          </View>
+          ) : (
+            <View style={styles.noPickupCard}>
+              <Text style={styles.noPickupText}>No upcoming pickups scheduled</Text>
+              <Text style={styles.noPickupSubtext}>
+                Your bins will be collected according to your zone's schedule
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Quick Actions */}
@@ -419,6 +499,13 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     marginTop: Spacing.xs,
   },
+  binCode: {
+    fontSize: FontSizes.small,
+    color: Colors.text.white,
+    opacity: 0.8,
+    marginTop: Spacing.xs,
+    fontWeight: '600',
+  },
   etaBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: Spacing.md,
@@ -429,6 +516,37 @@ const styles = StyleSheet.create({
     color: Colors.text.white,
     fontWeight: '700',
     fontSize: FontSizes.small,
+  },
+  collectorInfo: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  collectorText: {
+    color: Colors.text.white,
+    fontSize: FontSizes.small,
+    opacity: 0.9,
+  },
+  noPickupCard: {
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.lg,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    alignItems: 'center',
+  },
+  noPickupText: {
+    fontSize: FontSizes.h3,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    textAlign: 'center',
+  },
+  noPickupSubtext: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
   },
   actionsGrid: {
     flexDirection: 'row',

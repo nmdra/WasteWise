@@ -1,10 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../components/app-header';
+import { auth } from '../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 import { collectionService } from '../../services/collectionService';
-import { auth } from '../../config/firebase';
 
 export default function Activity() {
   const router = useRouter();

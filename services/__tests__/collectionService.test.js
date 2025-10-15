@@ -1,5 +1,4 @@
 import { collectionService } from '../collectionService';
-import { db } from '../../config/firebase';
 
 describe('collectionService', () => {
   beforeEach(() => {

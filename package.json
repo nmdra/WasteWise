@@ -28,7 +28,6 @@
     "babel-preset-expo": "^54.0.4",
     "expo": "~53.0.23",
     "expo-auth-session": "~6.2.1",
-    "expo-barcode-scanner": "^13.0.1",
     "expo-blur": "~14.1.5",
     "expo-camera": "~16.1.11",
     "expo-constants": "~17.1.7",

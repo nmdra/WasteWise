@@ -31,7 +31,7 @@ export default function CleanerTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="stops"
+        name="scan-bin"
         options={{
           title: 'Scan',
           tabBarIcon: ({ color, size }) => (
@@ -59,9 +59,10 @@ export default function CleanerTabLayout() {
       <Tabs.Screen name="missed" options={{ href: null }} />
       <Tabs.Screen name="qr" options={{ href: null }} />
       <Tabs.Screen name="report-issue" options={{ href: null }} />
-      <Tabs.Screen name="scan-bin" options={{ href: null }} />
+      <Tabs.Screen name="stops" options={{ href: null }} />
       <Tabs.Screen name="scan-error" options={{ href: null }} />
       <Tabs.Screen name="stop-details" options={{ href: null }} />
+      <Tabs.Screen name="pickup-confirmation" options={{ href: null }} />
     </Tabs>
   );
 }

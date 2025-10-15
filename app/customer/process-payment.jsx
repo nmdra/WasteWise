@@ -1,22 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { auth } from '../../config/firebase';
-import { paymentService } from '../../services/paymentService';
-import { formatCurrency, calculateMonthlyBill, calculateSpecialBookingFee } from '../../constants/paymentConfig';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import CardInput from '../../components/CardInput';
+import { auth } from '../../config/firebase';
+import { calculateMonthlyBill, calculateSpecialBookingFee, formatCurrency } from '../../constants/paymentConfig';
 import { createBooking } from '../../services/bookingService';
+import { paymentService } from '../../services/paymentService';
 
 export default function ProcessPayment() {
   const router = useRouter();

@@ -1,17 +1,18 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { collection, collectionGroup, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import AppHeader from '../../../components/app-header';
+import { auth, db } from '../../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
 import { collectionService } from '../../../services/collectionService';
-import { auth } from '../../../config/firebase';
 
 export default function ScanBinScreen() {
   const router = useRouter();
-  const { stopId, binId } = useLocalSearchParams();
   const [scanned, setScanned] = useState(false);
   const [scanning, setScanning] = useState(true);
+  const [processing, setProcessing] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
@@ -21,53 +22,141 @@ export default function ScanBinScreen() {
   }, [permission, requestPermission]);
 
   const handleBarCodeScanned = async ({ type, data }) => {
+    if (scanned || processing) return;
+    
     setScanned(true);
     setScanning(false);
+    setProcessing(true);
 
     try {
       // Parse QR code data (assuming it contains bin information)
-      const qrData = JSON.parse(data);
+      let qrData;
+      try {
+        qrData = JSON.parse(data);
+      } catch (parseError) {
+        // If not JSON, try to extract binId from string
+        qrData = { binId: data };
+      }
 
-      // Validate that scanned bin matches expected bin
-      if (qrData.binId !== binId) {
+      const scannedBinId = qrData.binId || data;
+      console.log('🔍 Scanned Bin ID:', scannedBinId);
+
+      // Search for stops across ALL schedules that contain this bin
+      console.log('🔍 Searching for stops with binId:', scannedBinId);
+      
+      // Use collectionGroup to search stops across all schedules
+      const stopsQuery = query(
+        collectionGroup(db, 'stops'),
+        where('status', '==', 'pending')
+      );
+
+      const stopsSnapshot = await getDocs(stopsQuery);
+      console.log('📍 Found', stopsSnapshot.size, 'pending stops total');
+
+      let foundStop = null;
+      let scheduleId = null;
+
+      // Search through all stops to find one with matching binId
+      for (const stopDoc of stopsSnapshot.docs) {
+        const stopData = stopDoc.data();
+        
+        // Check both old format (single bin) and new format (bins array)
+        let binMatch = false;
+        
+        if (stopData.bins && Array.isArray(stopData.bins)) {
+          // New format: bins is an array
+          binMatch = stopData.bins.some(bin => bin.binId === scannedBinId);
+        } else if (stopData.binId === scannedBinId) {
+          // Old format: single binId field
+          binMatch = true;
+        }
+
+        if (binMatch) {
+          foundStop = {
+            id: stopDoc.id,
+            ref: stopDoc.ref,
+            ...stopData
+          };
+          // Get schedule ID from the document path
+          scheduleId = stopDoc.ref.parent.parent.id;
+          console.log('✅ Found matching stop:', foundStop.id, 'in schedule:', scheduleId);
+          break;
+        }
+      }
+
+      if (!foundStop) {
         Alert.alert(
-          'Bin Mismatch',
-          `Scanned bin (${qrData.binId}) doesn't match expected bin (${binId})`,
-          [{ text: 'Try Again', onPress: () => setScanned(false) }]
+          'Stop Not Found',
+          `No pending collection stop found for bin ${scannedBinId}. This bin may not be scheduled for collection.`,
+          [{ 
+            text: 'Try Again', 
+            onPress: () => {
+              setScanned(false);
+              setScanning(true);
+              setProcessing(false);
+            }
+          }]
         );
         return;
       }
 
+      // Mark the stop as collected
+      console.log('📝 Updating stop status to collected...');
+      await updateDoc(foundStop.ref, {
+        status: 'collected',
+        collectedAt: new Date(),
+        collectedBy: auth.currentUser?.uid || 'cleaner',
+      });
+
       // Create collection record
       const collectionData = {
-        stopId,
-        binId: qrData.binId,
-        userId: auth.currentUser?.uid || 'cleaner_demo',
+        stopId: foundStop.id,
+        scheduleId: scheduleId,
+        binId: scannedBinId,
+        userId: auth.currentUser?.uid || 'cleaner',
         scannedAt: new Date().toISOString(),
-        wasteTypes: qrData.wasteTypes || ['general'],
+        wasteTypes: qrData.wasteTypes || foundStop.wasteTypes || ['general'],
         status: 'collected',
-        notes: 'QR scan successful - automatic collection'
+        notes: 'QR scan successful - automatic collection',
+        collectedAt: new Date(),
       };
 
-      // Submit collection using Firebase
+      console.log('💾 Creating collection record...');
       await collectionService.createCollection(collectionData);
 
       Alert.alert(
-        'Collection Recorded',
-        'Bin scanned and collection recorded successfully!',
+        'Collection Recorded ✅',
+        `Bin ${scannedBinId} has been marked as collected!\n\nSchedule: ${scheduleId}\nStop: ${foundStop.id}`,
         [{
-          text: 'OK',
-          onPress: () => router.replace('/(tabs)/cleaner/stops')
+          text: 'Done',
+          onPress: () => router.back()
+        },
+        {
+          text: 'Scan Another',
+          onPress: () => {
+            setScanned(false);
+            setScanning(true);
+            setProcessing(false);
+          }
         }]
       );
 
     } catch (error) {
-      console.error('Scan error:', error);
+      console.error('❌ Scan error:', error);
       Alert.alert(
         'Scan Error',
-        'Failed to process QR code. Please try again.',
-        [{ text: 'Try Again', onPress: () => setScanned(false) }]
+        `Failed to process QR code: ${error.message}`,
+        [{ 
+          text: 'Try Again', 
+          onPress: () => {
+            setScanned(false);
+            setScanning(true);
+            setProcessing(false);
+          }
+        }]
       );
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -104,8 +193,8 @@ export default function ScanBinScreen() {
       <AppHeader userName="Cleaner" userRole="cleaner" />
       
       <View style={styles.content}>
-        <Text style={styles.title}>Scan Bin QR Code</Text>
-        <Text style={styles.subtitle}>Expected Bin: {binId}</Text>
+        <Text style={styles.title}>Scan Bin QR Code 📱</Text>
+        <Text style={styles.subtitle}>Scan any bin to mark it as collected</Text>
 
         <View style={styles.scannerContainer}>
           <CameraView
@@ -119,29 +208,34 @@ export default function ScanBinScreen() {
           
           {scanned && (
             <View style={styles.scannedOverlay}>
-              <Text style={styles.scannedText}>Processing...</Text>
+              {processing ? (
+                <>
+                  <ActivityIndicator size="large" color="#fff" />
+                  <Text style={styles.scannedText}>Processing...</Text>
+                </>
+              ) : (
+                <Text style={styles.scannedText}>✓ Scanned</Text>
+              )}
             </View>
           )}
         </View>
 
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Scanning Instructions</Text>
+          <Text style={styles.infoTitle}>How It Works</Text>
           <Text style={styles.infoText}>
-            • Point camera at the QR code on the bin{'\n'}
-            • Ensure good lighting{'\n'}
-            • Hold steady until scan completes{'\n'}
-            • Collection will be recorded automatically
+            • Point camera at any bin's QR code{'\n'}
+            • System automatically finds the stop in all schedules{'\n'}
+            • Stop is marked as collected{'\n'}
+            • Collection record is created{'\n'}
+            • Works for any scheduled bin
           </Text>
         </View>
 
         <TouchableOpacity 
-          style={styles.manualBtn}
-          onPress={() => router.push({ 
-            pathname: '/(tabs)/cleaner/collection-details', 
-            params: { stopId, binId } 
-          })}
+          style={styles.backBtn}
+          onPress={() => router.back()}
         >
-          <Text style={styles.manualBtnText}>Enter Details Manually</Text>
+          <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -225,6 +319,19 @@ const styles = StyleSheet.create({
   },
   manualBtnText: {
     color: Colors.brand.teal,
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+  },
+  backBtn: {
+    backgroundColor: Colors.bg.light,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    paddingVertical: Spacing.md,
+    borderRadius: Radii.btn,
+    alignItems: 'center',
+  },
+  backBtnText: {
+    color: Colors.text.primary,
     fontSize: FontSizes.body,
     fontWeight: '600',
   },

@@ -14,11 +14,11 @@ jest.mock('firebase/firestore', () => ({
   setDoc: jest.fn(),
 }));
 
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getDoc, setDoc } from 'firebase/firestore';
 import {
-  getUserProfile,
-  updateUserProfile,
-  getUserZone,
+    getUserProfile,
+    getUserZone,
+    updateUserProfile,
 } from '../userService';
 
 describe('User Service - Profile Operations', () => {

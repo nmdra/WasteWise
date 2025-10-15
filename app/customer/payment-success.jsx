@@ -1,12 +1,12 @@
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import {
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import AppHeader from '../../components/app-header';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 import { formatCurrency } from '../../constants/paymentConfig';

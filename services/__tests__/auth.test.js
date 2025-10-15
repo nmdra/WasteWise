@@ -31,22 +31,21 @@ jest.mock('../stopsService', () => ({
 }));
 
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signOut,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import {
-  createUserProfile,
-  getUserProfile,
-  updateUserProfile,
-  signUpWithEmail,
-  signInWithEmail,
-  logOut,
-  getCurrentUser,
-} from '../auth';
+import { getDoc, setDoc } from 'firebase/firestore';
 import { auth } from '../../config/firebase';
+import {
+    createUserProfile,
+    getCurrentUser,
+    getUserProfile,
+    logOut,
+    signInWithEmail,
+    signUpWithEmail,
+    updateUserProfile,
+} from '../auth';
 
 describe('Auth Service - Profile Management', () => {
   beforeEach(() => {

@@ -302,13 +302,10 @@ export const paymentService = {
 
       console.log('🔄 Creating special booking payment');
 
-      // Generate a booking ID if not provided
-      const finalBookingId = bookingId || `booking_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
       // Store payment record in Firebase
       const paymentRecord = {
         type: 'special_booking',
-        bookingId: finalBookingId,
+        bookingId,
         customerId,
         customerEmail,
         customerName,
@@ -327,7 +324,6 @@ export const paymentService = {
       return {
         success: true,
         paymentId: paymentRef.id,
-        bookingId: finalBookingId,
         calculation,
         isTestPayment: true,
       };

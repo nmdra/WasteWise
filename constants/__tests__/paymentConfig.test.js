@@ -7,9 +7,9 @@
 import {
   SPECIAL_PICKUP_FEES,
   WASTE_TYPE_INFO,
-  getWasteTypeInfo,
-  calculateSpecialBookingFee,
   calculateMonthlyBill,
+  calculateSpecialBookingFee,
+  getWasteTypeInfo,
 } from '../../constants/paymentConfig';
 
 describe('Payment Config - Constants', () => {

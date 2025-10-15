@@ -1,24 +1,22 @@
-import { getAuth } from '../../config/firebase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import AppHeader from '../../components/app-header';
+import { getAuth } from '../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
+import { calculateSpecialBookingFee, formatCurrency, getWasteTypeInfo } from '../../constants/paymentConfig';
 import { getUserProfile } from '../../services/auth';
 import { createBooking } from '../../services/bookingService';
-import { wasteTypeIcons } from '../../services/scheduleService';
-import { calculateSpecialBookingFee, formatCurrency, getWasteTypeInfo } from '../../constants/paymentConfig';
 
 const WASTE_TYPES = [
   'hazardous',

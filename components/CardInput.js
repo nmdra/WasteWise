@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import {
-  View,
+  StyleSheet,
   Text,
   TextInput,
-  StyleSheet,
+  View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { detectCardType, formatCardNumber, validateCardNumber, validateExpiryDate, validateCVV } from '../services/paymentService';
+import { detectCardType, formatCardNumber, validateCardNumber, validateCVV, validateExpiryDate } from '../services/paymentService';
 
 const CardInput = ({ onCardChange, style, disabled = false }) => {
   const [cardNumber, setCardNumber] = useState('');

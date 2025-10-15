@@ -5,9 +5,9 @@
  */
 
 import {
-  BIN_CATEGORIES,
-  BIN_TO_WASTE_TYPE_MAP,
-  generateBinId,
+    BIN_CATEGORIES,
+    BIN_TO_WASTE_TYPE_MAP,
+    generateBinId,
 } from '../binService';
 
 describe('Bin Service - Constants', () => {

@@ -1,14 +1,13 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useState, useCallback } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, FlatList, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
 import StatusChip from '../../../components/cleaner/StatusChip';
-import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
-import { MockCleaner } from '../../../services/mockCleanerApi';
-import { collectionService } from '../../../services/collectionService';
-import { recordBinScan } from '../../../services/binService';
 import { auth } from '../../../config/firebase';
+import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
+import { recordBinScan } from '../../../services/binService';
+import { MockCleaner } from '../../../services/mockCleanerApi';
 
 const FILTERS = ['all', 'pending', 'completed'];
 

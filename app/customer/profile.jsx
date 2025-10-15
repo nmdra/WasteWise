@@ -1,18 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { getAuth } from '../../config/firebase';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import AppHeader from '../../components/app-header';
+import { getAuth } from '../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
 import { getUserProfile, logOut, updateUserProfile } from '../../services/auth';
 
