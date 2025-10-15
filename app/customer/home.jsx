@@ -372,9 +372,12 @@ const styles = StyleSheet.create({
     flex: 1,
     color: Colors.text.primary,
     fontSize: FontSizes.small,
+    flexWrap: 'wrap', // Allow text wrapping
+    lineHeight: 20, // Better line height for readability
   },
   section: {
     padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg, // Ensure consistent horizontal padding
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -402,6 +405,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    flexWrap: 'wrap', // Allow wrapping on small screens
+    gap: Spacing.sm, // Add gap when wrapped
   },
   pickupDate: {
     fontSize: FontSizes.h2,
@@ -429,10 +434,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.md,
+    justifyContent: 'space-between',
   },
   actionCard: {
-    flex: 1,
-    minWidth: '45%',
+    width: '48%', // Fixed width instead of flex: 1 and minWidth
     backgroundColor: Colors.bg.card,
     padding: Spacing.lg,
     borderRadius: Radii.card,
@@ -440,6 +445,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.line,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: Spacing.sm, // Add margin for wrapped rows
   },
   actionIcon: {
     fontSize: 32,
@@ -450,6 +456,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text.primary,
     textAlign: 'center',
+    flexWrap: 'wrap', // Allow text wrapping for long labels
+    numberOfLines: 2, // Limit to 2 lines
   },
   lastPickupCard: {
     backgroundColor: Colors.bg.card,
@@ -486,9 +494,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.line,
     padding: Spacing.lg,
+    marginHorizontal: -Spacing.sm, // Slight negative margin to maximize space
   },
   scheduleHeader: {
-    flexDirection: 'row',
     marginBottom: Spacing.md,
   },
   scheduleDate: {
@@ -513,6 +521,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: Radii.chip,
+    marginBottom: Spacing.xs, // Add margin for wrapped items
   },
   timeRangeText: {
     fontSize: FontSizes.small,
@@ -531,6 +540,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: Radii.small,
+    marginBottom: Spacing.xs, // Add margin for wrapped items
   },
   viewScheduleButton: {
     marginTop: Spacing.sm,

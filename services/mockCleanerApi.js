@@ -69,7 +69,15 @@ export const MockCleaner = {
 
   async submitPickup(payload) {
     await delay();
-    return { ok: true, pickupId: 'pk_2231', payload };
+    // Simulate updating stop status to completed
+    const stops = await this.getStopsList();
+    const updatedStops = stops.map(stop => 
+      stop.stopId === payload.stopId 
+        ? { ...stop, status: 'completed' }
+        : stop
+    );
+    // In a real app, this would persist to Firebase
+    return { ok: true, pickupId: 'pk_' + Date.now(), payload };
   },
 
   async markMissed(payload) {
