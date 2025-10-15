@@ -1,9 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
 import AppHeader from '../../components/app-header';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
-import { MockCustomer } from '../../services/mockCustomerApi';
+import { collectionService } from '../../services/collectionService';
+import { auth } from '../../config/firebase';
 
 export default function Activity() {
   const router = useRouter();
@@ -17,10 +18,42 @@ export default function Activity() {
 
   const loadActivity = async () => {
     try {
-      const data = await MockCustomer.getActivity();
-      setActivities(data);
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.log('No authenticated user found');
+        setActivities([]);
+        return;
+      }
+
+      console.log('📊 Loading activity for customer:', currentUser.uid);
+      
+      // Fetch collections for this customer (where ownerId = current user)
+      const collections = await collectionService.getCollectionsByOwner(currentUser.uid);
+      
+      console.log('📋 Found collections:', collections.length);
+
+      // Transform collection data to activity format
+      const activityData = collections.map(collection => ({
+        id: collection.id,
+        pickupId: collection.stopId || `pickup_${collection.id}`,
+        date: collection.collectedAt || collection.createdAt,
+        status: collection.status || 'completed',
+        types: collection.wasteTypes || ['general'],
+        weightKg: collection.weight || 0,
+        location: collection.location || 'Not specified',
+        notes: collection.notes || '',
+        binId: collection.binId,
+        cleanerName: `Cleaner ${collection.userId?.slice(0, 8)}` || 'Cleaner',
+        collectedAt: collection.collectedAt,
+        scannedAt: collection.scannedAt
+      }));
+
+      setActivities(activityData);
+      console.log('✅ Activity loaded successfully:', activityData.length, 'records');
+      
     } catch (error) {
-      console.error('Error loading activity:', error);
+      console.error('❌ Error loading activity:', error);
+      Alert.alert('Error', 'Failed to load activity history. Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -41,6 +74,56 @@ export default function Activity() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'collected':
+      case 'completed':
+        return Colors.brand.green;
+      case 'pending':
+        return Colors.brand.orange;
+      case 'cancelled':
+        return Colors.brand.red;
+      default:
+        return Colors.text.secondary;
+    }
+  };
+
+  const generateReport = () => {
+    if (activities.length === 0) {
+      Alert.alert('No Data', 'No collection data available to generate report.');
+      return;
+    }
+
+    const totalWeight = activities.reduce((sum, a) => sum + (a.weightKg || 0), 0);
+    const wasteTypes = new Set(activities.flatMap(a => a.types));
+    const completedCollections = activities.filter(a => a.status === 'collected' || a.status === 'completed').length;
+
+    const reportData = {
+      totalCollections: activities.length,
+      completedCollections,
+      totalWeight: totalWeight.toFixed(1),
+      wasteTypes: Array.from(wasteTypes),
+      dateRange: activities.length > 0 ? {
+        from: formatDate(activities[activities.length - 1].date),
+        to: formatDate(activities[0].date)
+      } : null
+    };
+
+    Alert.alert(
+      'Collection Report 📊',
+      `Total Collections: ${reportData.totalCollections}\nCompleted: ${reportData.completedCollections}\nTotal Weight: ${reportData.totalWeight} kg\nWaste Types: ${reportData.wasteTypes.join(', ')}\n\nPDF download coming soon!`,
+      [{ text: 'OK' }]
+    );
+  };
+
+  const downloadPDF = () => {
+    Alert.alert(
+      'Download PDF 📄',
+      'PDF download functionality will be implemented soon. This will include:\n\n• Detailed collection history\n• Weight analytics\n• Waste type breakdown\n• Environmental impact summary',
+      [{ text: 'OK' }]
+    );
   };
 
   if (loading) {
@@ -64,71 +147,115 @@ export default function Activity() {
         }
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Activity History</Text>
-          <Text style={styles.subtitle}>Your pickup and collection history</Text>
+          <View style={styles.titleContainer}>
+            <View>
+              <Text style={styles.title}>Activity History</Text>
+              <Text style={styles.subtitle}>Your pickup and collection history</Text>
+            </View>
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={styles.actionBtn} onPress={generateReport}>
+                <Text style={styles.actionBtnText}>📊 Report</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={downloadPDF}>
+                <Text style={styles.actionBtnText}>📄 PDF</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📊 Total Pickups: {activities.length}</Text>
+          <Text style={styles.sectionTitle}>📊 Total Collections: {activities.length}</Text>
           <View style={styles.statsCard}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>
-                {activities.reduce((sum, a) => sum + a.weightKg, 0).toFixed(1)} kg
+                {activities.reduce((sum, a) => sum + (a.weightKg || 0), 0).toFixed(1)} kg
               </Text>
               <Text style={styles.statLabel}>Total Weight</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>
-                {activities.filter((a) => a.status === 'completed').length}
+                {activities.filter((a) => a.status === 'collected' || a.status === 'completed').length}
               </Text>
-              <Text style={styles.statLabel}>Completed</Text>
+              <Text style={styles.statLabel}>Collected</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {new Set(activities.flatMap(a => a.types)).size}
+              </Text>
+              <Text style={styles.statLabel}>Waste Types</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Pickups</Text>
-          {activities.map((activity) => (
-            <View key={activity.pickupId} style={styles.activityCard}>
-              <View style={styles.activityHeader}>
-                <Text style={styles.activityDate}>{formatDate(activity.date)}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: Colors.status[activity.status] }]}>
-                  <Text style={styles.statusText}>{activity.status}</Text>
-                </View>
-              </View>
-
-              <View style={styles.activityDetails}>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Pickup ID:</Text>
-                  <Text style={styles.detailValue}>{activity.pickupId}</Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Waste Types:</Text>
-                  <View style={styles.wasteTypes}>
-                    {activity.types.map((type, index) => (
-                      <View key={index} style={styles.wasteChip}>
-                        <Text style={styles.wasteText}>{type}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Weight:</Text>
-                  <Text style={styles.detailValue}>{activity.weightKg} kg</Text>
-                </View>
-
-                {activity.photos && activity.photos.length > 0 && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Photos:</Text>
-                    <Text style={styles.detailValue}>{activity.photos.length} attached</Text>
-                  </View>
-                )}
-              </View>
+          <Text style={styles.sectionTitle}>Recent Collections</Text>
+          
+          {activities.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>📭 No collections yet</Text>
+              <Text style={styles.emptySubtext}>Your collection history will appear here once cleaners pick up your waste.</Text>
             </View>
-          ))}
+          ) : (
+            activities.map((activity) => (
+              <View key={activity.id} style={styles.activityCard}>
+                <View style={styles.activityHeader}>
+                  <Text style={styles.activityDate}>{formatDate(activity.date)}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(activity.status) }]}>
+                    <Text style={styles.statusText}>{activity.status}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.activityDetails}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Collection ID:</Text>
+                    <Text style={styles.detailValue}>{activity.id.slice(-8)}</Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Bin ID:</Text>
+                    <Text style={styles.detailValue}>{activity.binId}</Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Waste Types:</Text>
+                    <View style={styles.wasteTypes}>
+                      {activity.types.map((type, index) => (
+                        <View key={index} style={styles.wasteChip}>
+                          <Text style={styles.wasteText}>{type}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Weight:</Text>
+                    <Text style={styles.detailValue}>
+                      {activity.weightKg > 0 ? `${activity.weightKg} kg` : 'Not recorded'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Location:</Text>
+                    <Text style={styles.detailValue}>{activity.location}</Text>
+                  </View>
+
+                  {activity.notes && (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Notes:</Text>
+                      <Text style={styles.detailValue}>{activity.notes}</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Collected by:</Text>
+                    <Text style={styles.detailValue}>{activity.cleanerName}</Text>
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
         <View style={{ height: Spacing.xxl }} />
@@ -157,6 +284,11 @@ const styles = StyleSheet.create({
   header: {
     padding: Spacing.lg,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
   title: {
     fontSize: FontSizes.h1,
     fontWeight: '700',
@@ -166,6 +298,21 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: FontSizes.body,
     color: Colors.text.secondary,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  actionBtn: {
+    backgroundColor: Colors.brand.green,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.btn,
+  },
+  actionBtnText: {
+    color: Colors.text.white,
+    fontSize: FontSizes.small,
+    fontWeight: '600',
   },
   section: {
     padding: Spacing.lg,
@@ -270,5 +417,26 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.tiny,
     fontWeight: '600',
     color: Colors.brand.green,
+  },
+  emptyState: {
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  emptyText: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    marginBottom: Spacing.sm,
+  },
+  emptySubtext: {
+    fontSize: FontSizes.small,
+    color: Colors.text.muted,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

@@ -10,6 +10,7 @@ import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTh
 import { getStopStats } from '../../../services/stopsService';
 import { getPendingBookingsByZone } from '../../../services/bookingService';
 import { getUserProfile } from '../../../services/userService';
+import { collectionService } from '../../../services/collectionService';
 
 export default function CleanerHome() {
   const router = useRouter();
@@ -22,12 +23,27 @@ export default function CleanerHome() {
   const [userInfo, setUserInfo] = useState({ name: '', role: 'cleaner' });
   const [pendingBookings, setPendingBookings] = useState([]);
   const [userZone, setUserZone] = useState(null);
+  const [collectionStats, setCollectionStats] = useState(null);
 
   useEffect(() => {
     loadTodayRoute();
     loadUserInfo();
     loadUserZoneAndBookings();
+    loadCollectionStats();
   }, [user]);
+
+  const loadCollectionStats = async () => {
+    try {
+      if (!user) return;
+      
+      console.log('📊 Loading collection stats for cleaner:', user.uid);
+      const stats = await collectionService.getCollectionStats(user.uid);
+      setCollectionStats(stats);
+      console.log('✅ Collection stats loaded:', stats);
+    } catch (error) {
+      console.error('❌ Error loading collection stats:', error);
+    }
+  };
 
   const loadUserInfo = async () => {
     setUserInfo({
@@ -281,6 +297,61 @@ export default function CleanerHome() {
                 Manage All Bookings →
               </Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Collection Stats Card */}
+        {collectionStats && (
+          <View style={[styles.card, styles.collectionStatsCard]}>
+            <View style={styles.statsHeader}>
+              <View>
+                <Text style={styles.cardTitle}>📊 Your Collections</Text>
+                <Text style={styles.cardSubtitle}>Total waste collected</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.viewHistoryBtn}
+                onPress={() => router.push('/(tabs)/cleaner/collection-history')}
+              >
+                <Text style={styles.viewHistoryText}>View History</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.statsRow}>
+              <StatBlock 
+                label="Total" 
+                value={collectionStats.total} 
+                tint={Colors.brand.green} 
+              />
+              <StatBlock 
+                label="Weight (kg)" 
+                value={collectionStats.totalWeight.toFixed(1)} 
+                tint={Colors.brand.blue} 
+              />
+              <StatBlock 
+                label="Types" 
+                value={Object.keys(collectionStats.byWasteType).length} 
+                tint={Colors.brand.orange} 
+              />
+            </View>
+
+            {Object.keys(collectionStats.byWasteType).length > 0 && (
+              <View style={styles.wasteTypeBreakdown}>
+                <Text style={styles.breakdownTitle}>Breakdown by Type:</Text>
+                <View style={styles.wasteTypeList}>
+                  {Object.entries(collectionStats.byWasteType)
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, 3)
+                    .map(([type, count]) => (
+                      <View key={type} style={styles.wasteTypeItem}>
+                        <Text style={styles.wasteTypeName}>
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </Text>
+                        <Text style={styles.wasteTypeCount}>{count}</Text>
+                      </View>
+                    ))}
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -632,5 +703,55 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSizes.body,
     fontWeight: '700',
+  },
+  collectionStatsCard: {
+    marginBottom: Spacing.lg,
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.lg,
+  },
+  viewHistoryBtn: {
+    backgroundColor: Colors.brand.lightGreen,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.btn,
+  },
+  viewHistoryText: {
+    color: Colors.brand.green,
+    fontSize: FontSizes.small,
+    fontWeight: '600',
+  },
+  wasteTypeBreakdown: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.line,
+  },
+  breakdownTitle: {
+    fontSize: FontSizes.small,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    marginBottom: Spacing.sm,
+  },
+  wasteTypeList: {
+    gap: Spacing.xs,
+  },
+  wasteTypeItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  wasteTypeName: {
+    fontSize: FontSizes.small,
+    color: Colors.text.primary,
+  },
+  wasteTypeCount: {
+    fontSize: FontSizes.small,
+    fontWeight: '600',
+    color: Colors.brand.green,
   },
 });

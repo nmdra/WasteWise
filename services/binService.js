@@ -633,3 +633,50 @@ export const checkBinExists = async (binCode) => {
     return false;
   }
 };
+
+/**
+ * Get bin with owner details
+ * @param {string} binId - Bin document ID
+ * @returns {Promise<Object>} Bin data with owner information
+ */
+export const getBinWithOwner = async (binId) => {
+  try {
+    // Get bin data
+    const bin = await getBinById(binId);
+    if (!bin) {
+      return null;
+    }
+
+    // Get owner data
+    const ownerDoc = await getDoc(doc(db, 'users', bin.userId));
+    const owner = ownerDoc.exists() ? { id: ownerDoc.id, ...ownerDoc.data() } : null;
+
+    return {
+      bin,
+      owner
+    };
+  } catch (error) {
+    console.error('Error getting bin with owner:', error);
+    throw error;
+  }
+};
+
+/**
+ * Validate Firebase document ID format
+ * @param {string} docId - Document ID to validate
+ * @returns {boolean} True if valid format
+ */
+export const isValidFirebaseDocId = (docId) => {
+  if (!docId || typeof docId !== 'string') return false;
+  
+  // Firebase document IDs are typically 20 characters long
+  // but can be shorter or longer depending on how they were generated
+  const trimmedId = docId.trim();
+  
+  // Basic validation: length between 10-30 characters, alphanumeric
+  if (trimmedId.length < 10 || trimmedId.length > 30) return false;
+  
+  // Check if it contains only valid characters (alphanumeric)
+  const validPattern = /^[a-zA-Z0-9]+$/;
+  return validPattern.test(trimmedId);
+};

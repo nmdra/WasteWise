@@ -1,4 +1,4 @@
-import { collection, addDoc, updateDoc, doc, query, where, getDocs, Timestamp, increment } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, query, where, getDocs, Timestamp, increment, orderBy, limit } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 
 /**
@@ -8,7 +8,6 @@ export const collectionService = {
   /**
    * Create a new collection record after QR scan
    * @param {Object} collectionData - Collection data
-   * @param {string} collectionData.stopId - Stop ID
    * @param {string} collectionData.binId - Bin ID (binId field from bins collection)
    * @param {string} collectionData.userId - User ID of cleaner
    * @param {string} collectionData.scannedAt - ISO timestamp of scan
@@ -18,6 +17,9 @@ export const collectionService = {
    * @param {string} collectionData.binDocId - Firebase document ID of the bin
    * @param {string} collectionData.ownerId - Owner user ID
    * @param {string} collectionData.ownerName - Owner display name
+   * @param {number} collectionData.weight - Weight in kg
+   * @param {string} collectionData.location - Location details
+   * @param {string} collectionData.stopId - Stop ID (optional)
    * @returns {Promise<Object>} Created collection document
    */
   async createCollection(collectionData) {
@@ -25,7 +27,6 @@ export const collectionService = {
       const collectionRef = collection(db, 'collections');
 
       const docData = {
-        stopId: collectionData.stopId,
         binId: collectionData.binId,
         userId: collectionData.userId || auth.currentUser?.uid,
         scannedAt: Timestamp.fromDate(new Date(collectionData.scannedAt)),
@@ -33,7 +34,8 @@ export const collectionService = {
         wasteTypes: collectionData.wasteTypes || [],
         status: collectionData.status || 'collected',
         notes: collectionData.notes || '',
-        location: collectionData.location || null, // GPS coordinates if available
+        location: collectionData.location || null,
+        stopId: collectionData.stopId || null,
         binDocId: collectionData.binDocId || null, // Firebase document ID of the bin
         ownerId: collectionData.ownerId || null, // Owner user ID
         ownerName: collectionData.ownerName || null, // Owner display name
@@ -53,8 +55,9 @@ export const collectionService = {
             scanCount: increment(1),
             updatedAt: Timestamp.now()
           });
+          console.log('✅ Updated bin scan data successfully');
         } catch (binUpdateError) {
-          console.warn('Failed to update bin scan data:', binUpdateError);
+          console.warn('⚠️ Failed to update bin scan data:', binUpdateError);
           // Don't fail the collection if bin update fails
         }
       }
@@ -64,7 +67,7 @@ export const collectionService = {
         ...docData
       };
     } catch (error) {
-      console.error('Error creating collection:', error);
+      console.error('❌ Error creating collection:', error);
       throw error;
     }
   },
@@ -102,8 +105,8 @@ export const collectionService = {
   },
 
   /**
-   * Get collections for a specific user
-   * @param {string} userId - User ID
+   * Get collections for a specific user (cleaner)
+   * @param {string} userId - User ID (cleaner)
    * @param {Date} startDate - Start date filter
    * @param {Date} endDate - End date filter
    * @returns {Promise<Array>} Array of collection records
@@ -138,6 +141,47 @@ export const collectionService = {
   },
 
   /**
+   * Get collections for a specific owner (customer)
+   * @param {string} ownerId - Owner user ID (customer)
+   * @param {Date} startDate - Start date filter
+   * @param {Date} endDate - End date filter
+   * @returns {Promise<Array>} Array of collection records
+   */
+  async getCollectionsByOwner(ownerId, startDate = null, endDate = null) {
+    try {
+      const collectionRef = collection(db, 'collections');
+      let q = query(
+        collectionRef, 
+        where('ownerId', '==', ownerId),
+        orderBy('collectedAt', 'desc')
+      );
+
+      if (startDate && endDate) {
+        q = query(
+          collectionRef,
+          where('ownerId', '==', ownerId),
+          where('collectedAt', '>=', Timestamp.fromDate(startDate)),
+          where('collectedAt', '<=', Timestamp.fromDate(endDate)),
+          orderBy('collectedAt', 'desc')
+        );
+      }
+
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        collectedAt: doc.data().collectedAt?.toDate(),
+        scannedAt: doc.data().scannedAt?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate()
+      }));
+    } catch (error) {
+      console.error('Error getting collections by owner:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Get collections for a specific bin
    * @param {string} binId - Bin ID
    * @returns {Promise<Array>} Array of collection records
@@ -159,6 +203,87 @@ export const collectionService = {
     } catch (error) {
       console.error('Error getting collections by bin:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Get recent collections for dashboard/analytics
+   * @param {number} limit - Number of collections to fetch
+   * @returns {Promise<Array>} Array of recent collection records
+   */
+  async getRecentCollections(limit = 50) {
+    try {
+      const collectionRef = collection(db, 'collections');
+      const q = query(
+        collectionRef, 
+        orderBy('collectedAt', 'desc'),
+        limit(limit)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        collectedAt: doc.data().collectedAt?.toDate(),
+        scannedAt: doc.data().scannedAt?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate()
+      }));
+    } catch (error) {
+      console.error('Error getting recent collections:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get collection statistics
+   * @param {string} userId - User ID (optional, for user-specific stats)
+   * @returns {Promise<Object>} Collection statistics
+   */
+  async getCollectionStats(userId = null) {
+    try {
+      const collectionRef = collection(db, 'collections');
+      let q = userId 
+        ? query(collectionRef, where('userId', '==', userId))
+        : collectionRef;
+
+      const querySnapshot = await getDocs(q);
+      const collections = querySnapshot.docs.map(doc => doc.data());
+
+      const stats = {
+        total: collections.length,
+        byWasteType: {},
+        totalWeight: 0,
+        avgWeight: 0,
+        byStatus: {}
+      };
+
+      collections.forEach(collection => {
+        // Count by waste type
+        (collection.wasteTypes || []).forEach(type => {
+          stats.byWasteType[type] = (stats.byWasteType[type] || 0) + 1;
+        });
+
+        // Calculate weight
+        if (collection.weight) {
+          stats.totalWeight += collection.weight;
+        }
+
+        // Count by status
+        const status = collection.status || 'collected';
+        stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
+      });
+
+      // Calculate average weight
+      const collectionsWithWeight = collections.filter(c => c.weight > 0);
+      if (collectionsWithWeight.length > 0) {
+        stats.avgWeight = stats.totalWeight / collectionsWithWeight.length;
+      }
+
+      return stats;
+    } catch (error) {
+      console.error('Error getting collection stats:', error);
+      return { total: 0, byWasteType: {}, totalWeight: 0, avgWeight: 0, byStatus: {} };
     }
   },
 

@@ -1,15 +1,28 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AppHeader from '../../../components/app-header';
 import StatusChip from '../../../components/cleaner/StatusChip';
 import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
 import { MockCleaner } from '../../../services/mockCleanerApi';
 import { collectionService } from '../../../services/collectionService';
+import { recordBinScan } from '../../../services/binService';
 import { auth } from '../../../config/firebase';
 
 const FILTERS = ['all', 'pending', 'completed'];
+
+// Web-compatible alert function
+const showAlert = (title, message, buttons = [], onRetry = null) => {
+  if (Platform.OS === 'web') {
+    const userResponse = window.confirm(`${title}\n\n${message}`);
+    if (userResponse && onRetry) {
+      onRetry();
+    }
+  } else {
+    Alert.alert(title, message, buttons.length > 0 ? buttons : [{ text: 'OK' }]);
+  }
+};
 
 export default function CleanerStops() {
   const router = useRouter();
@@ -20,6 +33,7 @@ export default function CleanerStops() {
   const [mode, setMode] = useState('scan'); // 'list' or 'scan' - default to scan for the Scan tab
   const [scanned, setScanned] = useState(false);
   const [scanning, setScanning] = useState(true);
+  const [cameraReady, setCameraReady] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
 
   const loadStops = useCallback(async () => {
@@ -63,17 +77,57 @@ export default function CleanerStops() {
     setScanning(false);
 
     try {
-      // The QR code contains the Firebase document ID of the bin
-      const binDocId = data.trim();
-
-      // Validate that it's a Firebase document ID (should be 20 characters)
-      if (binDocId.length !== 20) {
-        Alert.alert(
+      console.log('🔍 QR Code scanned:', { type, data });
+      
+      // Parse the QR code data (it's JSON containing bin information)
+      let qrData;
+      try {
+        qrData = JSON.parse(data);
+        console.log('📄 Parsed QR data:', qrData);
+      } catch (parseError) {
+        showAlert(
           'Invalid QR Code',
-          'This QR code does not contain a valid bin ID. Please scan a valid bin QR code.',
-          [{ text: 'Try Again', onPress: () => setScanned(false) }]
+          'QR code data is not in valid JSON format. Please scan a valid bin QR code.',
+          [{ text: 'Try Again', onPress: () => setScanned(false) }],
+          () => setScanned(false)
         );
         return;
+      }
+
+      // Validate QR code structure
+      if (!qrData.binId || !qrData.accountId || qrData.type !== 'bin_qr') {
+        showAlert(
+          'Invalid Bin QR Code',
+          'This QR code is not a valid bin QR code. Please scan a bin QR code.',
+          [{ text: 'Try Again', onPress: () => setScanned(false) }],
+          () => setScanned(false)
+        );
+        return;
+      }
+
+      const binDocId = qrData.binId; // Firebase document ID
+      const accountId = qrData.accountId; // Bin owner's user ID
+      const binCategory = qrData.binCategory; // Bin category (paper, plastic, etc.)
+
+      console.log('✅ Valid bin QR code detected:', {
+        binDocId,
+        accountId,
+        binCategory
+      });
+
+      // Record the bin scan (update lastScanned and scanCount)
+      try {
+        console.log('📊 Recording bin scan...');
+        await recordBinScan(qrData.binCode || binDocId, {
+          logScan: true,
+          scannedBy: auth.currentUser?.uid || 'cleaner_demo',
+          location: 'Field Collection',
+          notes: `QR scan by cleaner for collection`
+        });
+        console.log('✅ Bin scan recorded successfully');
+      } catch (scanError) {
+        console.warn('⚠️ Failed to record bin scan:', scanError);
+        // Continue with collection process even if scan recording fails
       }
 
       // Navigate to pickup confirmation screen with the bin document ID
@@ -81,22 +135,29 @@ export default function CleanerStops() {
         pathname: '/(tabs)/cleaner/pickup-confirmation',
         params: {
           binId: binDocId,
-          scannedData: JSON.stringify({ type, data })
+          scannedData: JSON.stringify({ 
+            type, 
+            data, 
+            timestamp: new Date().toISOString(),
+            parsedData: qrData
+          })
         }
       });
 
     } catch (error) {
-      console.error('Scan error:', error);
-      Alert.alert(
+      console.error('❌ QR Scan error:', error);
+      showAlert(
         'Scan Error',
-        'Failed to process QR code. Please try again.',
-        [{ text: 'Try Again', onPress: () => setScanned(false) }]
+        `Failed to process QR code: ${error.message || 'Unknown error'}. Please try again.`,
+        [{ text: 'Try Again', onPress: () => setScanned(false) }],
+        () => setScanned(false)
       );
     }
   };
 
   // Render scan mode
   if (mode === 'scan') {
+    // Check camera permissions first
     if (!permission) {
       return (
         <View style={styles.container}>
@@ -113,24 +174,63 @@ export default function CleanerStops() {
         <View style={styles.container}>
           <AppHeader userName={userName} userRole="cleaner" />
           <View style={styles.content}>
-            <Text style={styles.permissionText}>Camera permission denied</Text>
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={requestPermission}
-            >
-              <Text style={styles.retryBtnText}>Grant Permission</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.retryBtn, { marginTop: Spacing.md }]}
-              onPress={() => setMode('list')}
-            >
-              <Text style={styles.retryBtnText}>Back to Stops</Text>
-            </TouchableOpacity>
+            <Text style={styles.title}>QR Scanner</Text>
+            <Text style={styles.subtitle}>Camera access required</Text>
+            
+            <View style={styles.permissionContainer}>
+              <Text style={styles.permissionText}>
+                � Camera access is needed to scan QR codes
+              </Text>
+              
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={requestPermission}
+              >
+                <Text style={styles.primaryBtnText}>Allow Camera Access</Text>
+              </TouchableOpacity>
+              
+              {Platform.OS === 'web' && (
+                <View style={styles.webPermissionHelp}>
+                  <Text style={styles.webPermissionHelpText}>
+                    Click "Allow" when your browser asks for camera permission
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity 
+                style={styles.testBtn}
+                onPress={() => {
+                  // Test with example QR data
+                  const testQRData = {
+                    "accountId": "RZtTpvzq9UVAckcOlMrWCOyJ8yI3",
+                    "binId": "QynjhuuGpQm93KQfMUkd",
+                    "binCategory": "paper",
+                    "nonce": "1761258709850-go67ze",
+                    "type": "bin_qr",
+                    "timestamp": Date.now()
+                  };
+                  handleBarCodeScanned({ 
+                    type: 'qr', 
+                    data: JSON.stringify(testQRData)
+                  });
+                }}
+              >
+                <Text style={styles.testBtnText}>🧪 Simulate QR Scan</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.secondaryBtn}
+                onPress={() => setMode('list')}
+              >
+                <Text style={styles.secondaryBtnText}>Back to Stops</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       );
     }
 
+    // Camera is available and permission granted, show camera view
     return (
       <View style={styles.container}>
         <AppHeader userName={userName} userRole="cleaner" />
@@ -147,11 +247,41 @@ export default function CleanerStops() {
               barcodeScannerSettings={{
                 barcodeTypes: ["qr"],
               }}
+              {...(Platform.OS === 'web' && {
+                enableTorch: false,
+                ratio: '16:9',
+              })}
+              onCameraReady={() => {
+                console.log('📹 Camera ready');
+                setCameraReady(true);
+              }}
+              onMountError={(error) => {
+                console.error('📹 Camera mount error:', error);
+                setCameraReady(false);
+                showAlert('Camera Error', 'Failed to initialize camera. Please refresh the page and try again.');
+              }}
             />
             
+            {!cameraReady && (
+              <View style={styles.cameraLoadingOverlay}>
+                <Text style={styles.cameraLoadingText}>📹 Initializing camera...</Text>
+                <Text style={styles.cameraLoadingSubtext}>
+                  Please allow camera access when prompted
+                </Text>
+              </View>
+            )}
+
             {scanned && (
               <View style={styles.scannedOverlay}>
                 <Text style={styles.scannedText}>Processing...</Text>
+              </View>
+            )}
+            
+            {Platform.OS === 'web' && cameraReady && (
+              <View style={styles.webCameraInfo}>
+                <Text style={styles.webCameraInfoText}>
+                  📹 Point camera at QR code to scan
+                </Text>
               </View>
             )}
           </View>
@@ -171,6 +301,33 @@ export default function CleanerStops() {
               <Text style={styles.manualBtnText}>Scan Again</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Test Button for Development */}
+          {__DEV__ && (
+            <View style={styles.testSection}>
+              <TouchableOpacity 
+                style={styles.testBtn}
+                onPress={() => {
+                  // Test with example QR data matching the real format
+                  const testQRData = {
+                    "accountId": "RZtTpvzq9UVAckcOlMrWCOyJ8yI3",
+                    "binId": "QynjhuuGpQm93KQfMUkd",
+                    "binCategory": "paper",
+                    "nonce": "1761258709850-go67ze",
+                    "type": "bin_qr",
+                    "timestamp": Date.now()
+                  };
+                  
+                  handleBarCodeScanned({ 
+                    type: 'qr', 
+                    data: JSON.stringify(testQRData)
+                  });
+                }}
+              >
+                <Text style={styles.testBtnText}>🧪 Test Scan (Dev Only)</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -340,12 +497,86 @@ const styles = StyleSheet.create({
     borderRadius: Radii.card,
     overflow: 'hidden',
     height: 300,
+    width: '100%',
     marginBottom: Spacing.lg,
     borderWidth: 2,
     borderColor: Colors.line,
+    backgroundColor: Colors.bg.surface,
   },
   scanner: {
     flex: 1,
+    width: '100%',
+    height: '100%',
+    ...(Platform.OS === 'web' && {
+      objectFit: 'cover',
+    }),
+  },
+  webCameraInfo: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 5,
+    padding: 8,
+  },
+  webCameraInfoText: {
+    color: Colors.text.white,
+    fontSize: FontSizes.caption,
+    textAlign: 'center',
+  },
+  cameraLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.bg.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  cameraLoadingText: {
+    color: Colors.text.primary,
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  cameraLoadingSubtext: {
+    color: Colors.text.secondary,
+    fontSize: FontSizes.caption,
+    textAlign: 'center',
+  },
+  permissionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  primaryBtn: {
+    backgroundColor: Colors.role.cleaner,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radii.btn,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  primaryBtnText: {
+    color: Colors.text.white,
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  webPermissionHelp: {
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.md,
+    borderRadius: Radii.card,
+    marginVertical: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  webPermissionHelpText: {
+    color: Colors.text.secondary,
+    fontSize: FontSizes.caption,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   scannedOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -406,5 +637,44 @@ const styles = StyleSheet.create({
     color: Colors.text.white,
     fontSize: FontSizes.body,
     fontWeight: '600',
+  },
+  testSection: {
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.line,
+  },
+  testBtn: {
+    backgroundColor: '#FF6B35',
+    paddingVertical: Spacing.md,
+    borderRadius: Radii.btn,
+    alignItems: 'center',
+  },
+  testBtnText: {
+    color: Colors.text.white,
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+  },
+  webFallbackContainer: {
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.line,
+    marginBottom: Spacing.lg,
+  },
+  webFallbackTitle: {
+    fontSize: FontSizes.h3,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.md,
+  },
+  webFallbackText: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+    lineHeight: 22,
   },
 });

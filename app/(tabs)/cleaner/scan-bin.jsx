@@ -1,4 +1,4 @@
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -10,18 +10,15 @@ import { auth } from '../../../config/firebase';
 export default function ScanBinScreen() {
   const router = useRouter();
   const { stopId, binId } = useLocalSearchParams();
-  const [hasPermission, setHasPermission] = useState(null);
   const [scanned, setScanned] = useState(false);
   const [scanning, setScanning] = useState(true);
+  const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
-    const getBarCodeScannerPermissions = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
-
-    getBarCodeScannerPermissions();
-  }, []);
+    if (!permission) {
+      requestPermission();
+    }
+  }, [permission, requestPermission]);
 
   const handleBarCodeScanned = async ({ type, data }) => {
     setScanned(true);
@@ -74,7 +71,7 @@ export default function ScanBinScreen() {
     }
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.container}>
         <AppHeader userName="Cleaner" userRole="cleaner" />
@@ -85,7 +82,7 @@ export default function ScanBinScreen() {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={styles.container}>
         <AppHeader userName="Cleaner" userRole="cleaner" />
@@ -93,7 +90,7 @@ export default function ScanBinScreen() {
           <Text style={styles.permissionText}>Camera permission denied</Text>
           <TouchableOpacity 
             style={styles.retryBtn}
-            onPress={() => BarCodeScanner.requestPermissionsAsync()}
+            onPress={requestPermission}
           >
             <Text style={styles.retryBtnText}>Grant Permission</Text>
           </TouchableOpacity>
@@ -111,12 +108,14 @@ export default function ScanBinScreen() {
         <Text style={styles.subtitle}>Expected Bin: {binId}</Text>
 
         <View style={styles.scannerContainer}>
-          {scanning && (
-            <BarCodeScanner
-              onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-              style={styles.scanner}
-            />
-          )}
+          <CameraView
+            style={styles.scanner}
+            facing="back"
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ["qr"],
+            }}
+          />
           
           {scanned && (
             <View style={styles.scannedOverlay}>

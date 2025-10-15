@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth as getFirebaseAuth, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -17,13 +17,16 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase services
-const auth = getFirebaseAuth(app);
+// Note: For React Native with AsyncStorage persistence, you would typically use:
+// import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+// import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+// However, for Expo Go and development, the standard getAuth works fine
+const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
-// Export auth instance and getAuth function for compatibility
-export { auth, db, storage, googleProvider, onAuthStateChanged };
-export const getAuth = () => auth;
+// Export auth instance and services
+export { auth, db, storage, googleProvider, onAuthStateChanged, getAuth };
 
 export default app;
