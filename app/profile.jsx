@@ -125,7 +125,10 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
           
-          <TouchableOpacity style={styles.settingCard}>
+          <TouchableOpacity 
+            style={styles.settingCard}
+            onPress={() => router.push('/customer/profile')}
+          >
             <Text style={styles.settingIcon}>✏️</Text>
             <Text style={styles.settingText}>Edit Profile</Text>
             <Text style={styles.settingArrow}>›</Text>

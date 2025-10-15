@@ -85,6 +85,7 @@ export default function CustomerLayout() {
       <Tabs.Screen name="select-payment" options={{ href: null }} />
       <Tabs.Screen name="payment-details" options={{ href: null }} />
       <Tabs.Screen name="payment-success" options={{ href: null }} />
+      <Tabs.Screen name="process-payment" options={{ href: null }} />
     </Tabs>
   );
 }

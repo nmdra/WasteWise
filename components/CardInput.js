@@ -6,7 +6,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { detectCardType, formatCardNumber, validateCardNumber, validateExpiryDate, validateCVV } from '../services/mockPaymentService';
+import { detectCardType, formatCardNumber, validateCardNumber, validateExpiryDate, validateCVV } from '../services/paymentService';
 
 const CardInput = ({ onCardChange, style, disabled = false }) => {
   const [cardNumber, setCardNumber] = useState('');

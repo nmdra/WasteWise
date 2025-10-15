@@ -18,8 +18,19 @@ import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme
 import { getUserProfile } from '../../services/auth';
 import { createBooking } from '../../services/bookingService';
 import { wasteTypeIcons } from '../../services/scheduleService';
+import { calculateSpecialBookingFee, formatCurrency, getWasteTypeInfo } from '../../constants/paymentConfig';
 
-const WASTE_TYPES = ['general', 'recyclable', 'organic', 'electronic', 'hazardous'];
+const WASTE_TYPES = [
+  'hazardous',
+  'electronic', 
+  'bulky',
+  'organic',
+  'plastic',
+  'paper',
+  'glass',
+  'metal',
+  'general',
+];
 
 export default function CreateBooking() {
   const router = useRouter();
@@ -147,48 +158,63 @@ export default function CreateBooking() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    setSaving(true);
+    // Calculate fees for selected waste types
+    const calculation = calculateSpecialBookingFee(selectedWasteTypes);
 
-    try {
-      const bookingData = {
-        customerId: user.uid,
-        customerName: userProfile.displayName || userProfile.firstName || 'Customer',
-        customerEmail: user.email || userProfile.email || 'N/A',
-        customerZone: userProfile.zone || 'A',
-        customerAddress: address,
-        address: address,
-        zone: userProfile.zone || 'A',
-        preferredDateRange: dateRange,
-        wasteTypes: selectedWasteTypes,
-        notes: notes.trim(),
-        scheduleId: scheduleId || null,
-      };
+    const bookingData = {
+      customerId: user.uid,
+      customerName: userProfile.displayName || userProfile.firstName || 'Customer',
+      customerEmail: user.email || userProfile.email || 'N/A',
+      customerZone: userProfile.zone || 'A',
+      customerAddress: address,
+      address: address,
+      zone: userProfile.zone || 'A',
+      preferredDateRange: dateRange,
+      wasteTypes: selectedWasteTypes,
+      notes: notes.trim(),
+      scheduleId: scheduleId || null,
+    };
 
-      const result = await createBooking(bookingData);
+    if (calculation.total > 0) {
+      // Navigate to payment screen for paid bookings
+      router.push({
+        pathname: '/customer/process-payment',
+        params: {
+          paymentType: 'special_booking',
+          bookingData: JSON.stringify(bookingData),
+        },
+      });
+    } else {
+      // Create booking directly for free waste types
+      setSaving(true);
+      
+      try {
+        const result = await createBooking(bookingData);
 
-      if (result.success) {
-        Alert.alert(
-          'Success',
-          'Your booking request has been submitted. A collector will review and approve it soon.',
-          [
-            {
-              text: 'View My Bookings',
-              onPress: () => router.push('/customer/my-bookings'),
-            },
-            {
-              text: 'OK',
-              onPress: () => router.back(),
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Error', result.error || 'Failed to create booking');
+        if (result.success) {
+          Alert.alert(
+            'Success',
+            'Your free booking request has been submitted. A collector will review and approve it soon.',
+            [
+              {
+                text: 'View My Bookings',
+                onPress: () => router.push('/customer/my-bookings'),
+              },
+              {
+                text: 'OK',
+                onPress: () => router.back(),
+              },
+            ]
+          );
+        } else {
+          Alert.alert('Error', result.error || 'Failed to create booking');
+        }
+      } catch (error) {
+        console.error('Error creating booking:', error);
+        Alert.alert('Error', 'Failed to create booking request');
+      } finally {
+        setSaving(false);
       }
-    } catch (error) {
-      console.error('Error creating booking:', error);
-      Alert.alert('Error', 'Failed to create booking request');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -257,26 +283,39 @@ export default function CreateBooking() {
           <Text style={styles.sectionSubtitle}>Select all types you need to dispose</Text>
 
           <View style={styles.wasteTypesGrid}>
-            {WASTE_TYPES.map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.wasteTypeChip,
-                  selectedWasteTypes.includes(type) && styles.wasteTypeChipSelected,
-                ]}
-                onPress={() => toggleWasteType(type)}
-              >
-                <Text style={styles.wasteTypeIcon}>{wasteTypeIcons[type]}</Text>
-                <Text
+            {WASTE_TYPES.map((type) => {
+              const wasteInfo = getWasteTypeInfo(type);
+              const isSelected = selectedWasteTypes.includes(type);
+
+              return (
+                <TouchableOpacity
+                  key={type}
                   style={[
-                    styles.wasteTypeLabel,
-                    selectedWasteTypes.includes(type) && styles.wasteTypeLabelSelected,
+                    styles.wasteTypeChip,
+                    isSelected && styles.wasteTypeChipSelected,
                   ]}
+                  onPress={() => toggleWasteType(type)}
                 >
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text style={styles.wasteTypeIcon}>{wasteInfo.icon}</Text>
+                  <Text
+                    style={[
+                      styles.wasteTypeLabel,
+                      isSelected && styles.wasteTypeLabelSelected,
+                    ]}
+                  >
+                    {wasteInfo.name}
+                  </Text>
+                  <Text style={styles.wasteTypeFee}>
+                    {formatCurrency(wasteInfo.fee)}
+                  </Text>
+                  {isSelected && (
+                    <View style={styles.checkMark}>
+                      <Text style={styles.checkMarkText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -318,6 +357,68 @@ export default function CreateBooking() {
             • Make sure your waste is properly sorted and ready for collection
           </Text>
         </View>
+
+        {/* Cost Breakdown */}
+        {selectedWasteTypes.length > 0 && (
+          <View style={styles.costSection}>
+            <Text style={styles.sectionTitle}>💰 Cost Breakdown</Text>
+            
+            {(() => {
+              const calculation = calculateSpecialBookingFee(selectedWasteTypes);
+              
+              return (
+                <View style={styles.costCard}>
+                  {calculation.breakdown.map((item, index) => {
+                    const wasteInfo = getWasteTypeInfo(item.wasteType);
+                    return (
+                      <View key={index} style={styles.costRow}>
+                        <Text style={styles.costLabel}>
+                          {wasteInfo.icon} {wasteInfo.name}:
+                        </Text>
+                        <Text style={styles.costValue}>
+                          {formatCurrency(item.fee)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  
+                  <View style={styles.divider} />
+                  
+                  <View style={styles.costRow}>
+                    <Text style={styles.costLabel}>Subtotal:</Text>
+                    <Text style={styles.costValue}>
+                      {formatCurrency(calculation.subtotal)}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.costRow}>
+                    <Text style={styles.costLabel}>Tax (8%):</Text>
+                    <Text style={styles.costValue}>
+                      {formatCurrency(calculation.tax)}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.divider} />
+                  
+                  <View style={styles.costRow}>
+                    <Text style={styles.totalLabel}>Total:</Text>
+                    <Text style={styles.totalValue}>
+                      {formatCurrency(calculation.total)}
+                    </Text>
+                  </View>
+                  
+                  {calculation.total === 0 && (
+                    <View style={styles.freeNotice}>
+                      <Text style={styles.freeNoticeText}>
+                        🎉 This booking is free! No payment required.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+          </View>
+        )}
       </ScrollView>
 
       {/* Submit Button */}
@@ -330,7 +431,19 @@ export default function CreateBooking() {
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.submitButtonText}>Submit Booking Request</Text>
+            <Text style={styles.submitButtonText}>
+              {(() => {
+                if (selectedWasteTypes.length > 0) {
+                  const calculation = calculateSpecialBookingFee(selectedWasteTypes);
+                  if (calculation.total > 0) {
+                    return `Continue to Payment (${formatCurrency(calculation.total)})`;
+                  } else {
+                    return 'Submit Free Booking Request';
+                  }
+                }
+                return 'Submit Booking Request';
+              })()}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -430,6 +543,28 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.body,
     color: Colors.text.secondary,
     fontWeight: '600',
+    marginBottom: 4,
+  },
+  wasteTypeFee: {
+    fontSize: FontSizes.small,
+    color: Colors.text.muted,
+    fontWeight: '500',
+  },
+  checkMark: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkMarkText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   wasteTypeLabelSelected: {
     color: Colors.primary,
@@ -494,5 +629,59 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSizes.h3,
     fontWeight: '700',
+  },
+  costSection: {
+    padding: Spacing.lg,
+  },
+  costCard: {
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  costRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  costLabel: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    flex: 1,
+  },
+  costValue: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    fontWeight: '500',
+  },
+  totalLabel: {
+    fontSize: FontSizes.h3,
+    fontWeight: 'bold',
+    color: Colors.text.primary,
+  },
+  totalValue: {
+    fontSize: FontSizes.h3,
+    fontWeight: 'bold',
+    color: Colors.primary,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.line,
+    marginVertical: 8,
+  },
+  freeNotice: {
+    backgroundColor: '#E8F5E9',
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+    marginTop: Spacing.md,
+    alignItems: 'center',
+  },
+  freeNoticeText: {
+    fontSize: FontSizes.body,
+    color: Colors.primary,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

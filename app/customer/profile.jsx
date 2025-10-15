@@ -26,6 +26,7 @@ export default function CustomerProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Form fields
   const [firstName, setFirstName] = useState('');
@@ -47,18 +48,28 @@ export default function CustomerProfile() {
         return;
       }
 
+      console.log('Loading profile for user:', user.uid);
       const result = await getUserProfile(user.uid);
+      console.log('Profile load result:', result);
+      
       if (result.success && result.user) {
-        setProfile(result.user);
-        setFirstName(result.user.firstName || '');
-        setLastName(result.user.lastName || '');
-        setPhoneNumber(result.user.phoneNumber || '');
-        setAddress(result.user.address || '');
-        setSelectedZone(result.user.zone || 'A');
+        const userData = result.user;
+        console.log('User data loaded:', userData);
+        
+        setProfile(userData);
+        setFirstName(userData.firstName || '');
+        setLastName(userData.lastName || '');
+        setPhoneNumber(userData.phoneNumber || '');
+        setAddress(userData.address || '');
+        setSelectedZone(userData.zone || 'A'); // Default to 'A' if zone doesn't exist
+      } else {
+        // Handle case where profile doesn't exist
+        console.warn('Profile not found or failed to load:', result.error);
+        Alert.alert('Warning', 'Could not load your profile data. You can still update your information.');
       }
     } catch (error) {
       console.error('Error loading profile:', error);
-      Alert.alert('Error', 'Failed to load profile');
+      Alert.alert('Error', `Failed to load profile: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -67,6 +78,12 @@ export default function CustomerProfile() {
   const handleSaveProfile = async () => {
     try {
       setSaving(true);
+
+      // Validate required fields
+      if (!firstName.trim()) {
+        Alert.alert('Validation Error', 'First name is required');
+        return;
+      }
 
       const updates = {
         firstName: firstName.trim(),
@@ -77,20 +94,42 @@ export default function CustomerProfile() {
         displayName: `${firstName.trim()} ${lastName.trim()}`.trim() || user.email,
       };
 
+      console.log('Saving profile updates:', updates);
+
       const result = await updateUserProfile(user.uid, updates);
 
       if (result.success) {
         Alert.alert('Success', 'Profile updated successfully!');
+        setIsEditing(false); // Exit edit mode
         loadProfile(); // Reload profile
       } else {
+        console.error('Profile update failed:', result.error);
         Alert.alert('Error', result.error || 'Failed to update profile');
       }
     } catch (error) {
       console.error('Error saving profile:', error);
-      Alert.alert('Error', 'Failed to save profile');
+      Alert.alert('Error', `Failed to save profile: ${error.message}`);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCancelEdit = () => {
+    // Reset form to original values
+    if (profile) {
+      setFirstName(profile.firstName || '');
+      setLastName(profile.lastName || '');
+      setPhoneNumber(profile.phoneNumber || '');
+      setAddress(profile.address || '');
+      setSelectedZone(profile.zone || 'A');
+    }
+    setIsEditing(false);
+  };
+
+  const handleStartEdit = () => {
+    console.log('🔄 Starting edit mode...');
+    setIsEditing(true);
+    console.log('✅ Edit mode activated');
   };
 
   const handleLogout = async () => {
@@ -139,8 +178,19 @@ export default function CustomerProfile() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>👤 My Profile</Text>
-          <Text style={styles.subtitle}>Manage your account information</Text>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>👤 My Profile</Text>
+            <Text style={styles.subtitle}>
+              {isEditing ? 'Edit your account information' : 'Manage your account information'}
+            </Text>
+          </View>
+          
+          {console.log('🔍 Current editing state:', isEditing)}
+          {!isEditing && (
+            <TouchableOpacity style={styles.editButton} onPress={handleStartEdit}>
+              <Text style={styles.editButtonText}>✏️ Edit</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Account Info */}
@@ -166,37 +216,45 @@ export default function CustomerProfile() {
 
           <Text style={styles.inputLabel}>First Name</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, !isEditing && styles.inputDisabled]}
             placeholder="Enter your first name"
             value={firstName}
             onChangeText={setFirstName}
+            editable={isEditing}
+            placeholderTextColor="#999"
           />
 
           <Text style={styles.inputLabel}>Last Name</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, !isEditing && styles.inputDisabled]}
             placeholder="Enter your last name"
             value={lastName}
             onChangeText={setLastName}
+            editable={isEditing}
+            placeholderTextColor="#999"
           />
 
           <Text style={styles.inputLabel}>Phone Number</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, !isEditing && styles.inputDisabled]}
             placeholder="+1 (555) 123-4567"
             value={phoneNumber}
             onChangeText={setPhoneNumber}
             keyboardType="phone-pad"
+            editable={isEditing}
+            placeholderTextColor="#999"
           />
 
           <Text style={styles.inputLabel}>Address</Text>
           <TextInput
-            style={[styles.input, styles.addressInput]}
+            style={[styles.input, styles.addressInput, !isEditing && styles.inputDisabled]}
             placeholder="Enter your full address"
             value={address}
             onChangeText={setAddress}
             multiline
             numberOfLines={3}
+            editable={isEditing}
+            placeholderTextColor="#999"
           />
         </View>
 
@@ -214,13 +272,16 @@ export default function CustomerProfile() {
                 style={[
                   styles.zoneChip,
                   selectedZone === zone && styles.zoneChipSelected,
+                  !isEditing && styles.zoneChipDisabled,
                 ]}
-                onPress={() => setSelectedZone(zone)}
+                onPress={() => isEditing && setSelectedZone(zone)}
+                disabled={!isEditing}
               >
                 <Text
                   style={[
                     styles.zoneChipText,
                     selectedZone === zone && styles.zoneChipTextSelected,
+                    !isEditing && styles.zoneChipTextDisabled,
                   ]}
                 >
                   Zone {zone}
@@ -230,20 +291,31 @@ export default function CustomerProfile() {
           </View>
         </View>
 
-        {/* Save Button */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            onPress={handleSaveProfile}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Save/Cancel Buttons - Only show when editing */}
+        {isEditing && (
+          <View style={styles.section}>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={handleCancelEdit}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Logout Button */}
         <View style={styles.section}>
@@ -294,10 +366,27 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: Spacing.lg,
     backgroundColor: Colors.bg.card,
     borderBottomWidth: 1,
     borderBottomColor: Colors.line,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  editButton: {
+    backgroundColor: Colors.primary || '#16A34A',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: Radii.small,
+  },
+  editButtonText: {
+    color: 'white',
+    fontSize: FontSizes.body,
+    fontWeight: '600',
   },
   title: {
     fontSize: FontSizes.h1,
@@ -353,6 +442,11 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     fontSize: FontSizes.body,
     marginBottom: Spacing.sm,
+    color: Colors.text.primary,
+  },
+  inputDisabled: {
+    backgroundColor: '#f8f9fa',
+    color: '#6b7280',
   },
   addressInput: {
     minHeight: 80,
@@ -383,6 +477,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary || '#16A34A',
     backgroundColor: '#e8f5e9',
   },
+  zoneChipDisabled: {
+    opacity: 0.6,
+  },
   zoneChipText: {
     fontSize: FontSizes.body,
     fontWeight: '600',
@@ -391,7 +488,29 @@ const styles = StyleSheet.create({
   zoneChipTextSelected: {
     color: Colors.primary || '#16A34A',
   },
+  zoneChipTextDisabled: {
+    color: '#9ca3af',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    padding: Spacing.lg,
+    borderRadius: Radii.card,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  cancelButtonText: {
+    color: '#6b7280',
+    fontSize: FontSizes.h3,
+    fontWeight: '600',
+  },
   saveButton: {
+    flex: 1,
     backgroundColor: Colors.primary || '#16A34A',
     padding: Spacing.lg,
     borderRadius: Radii.card,

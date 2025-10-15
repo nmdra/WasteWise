@@ -13,9 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { auth } from '../../config/firebase';
-import { mockPaymentService } from '../../services/mockPaymentService';
+import { paymentService } from '../../services/paymentService';
 import { formatCurrency, calculateMonthlyBill, calculateSpecialBookingFee } from '../../constants/paymentConfig';
 import CardInput from '../../components/CardInput';
+import { createBooking } from '../../services/bookingService';
 
 export default function ProcessPayment() {
   const router = useRouter();
@@ -60,14 +61,14 @@ export default function ProcessPayment() {
 
       if (paymentType === 'monthly_bill' && billData) {
         calc = calculateMonthlyBill(billData.months || 1, billData.additionalServices || []);
-        response = await mockPaymentService.createMonthlyBillPayment({
+        response = await paymentService.createMonthlyBillPayment({
           ...billData,
           customerId: currentUser.uid,
           customerEmail: currentUser.email,
         });
       } else if (paymentType === 'special_booking' && bookingData) {
         calc = calculateSpecialBookingFee(bookingData.wasteTypes || []);
-        response = await mockPaymentService.createSpecialBookingPayment({
+        response = await paymentService.createSpecialBookingPayment({
           ...bookingData,
           customerId: currentUser.uid,
           customerEmail: currentUser.email,
@@ -106,8 +107,8 @@ export default function ProcessPayment() {
         amount: calculation.total,
       });
 
-      // Process payment with mock service
-      const result = await mockPaymentService.processPayment(paymentData.paymentId, {
+      // Process payment with service
+      const result = await paymentService.processPayment(paymentData.paymentId, {
         ...cardDetails,
         amount: calculation.total,
       });
@@ -120,9 +121,38 @@ export default function ProcessPayment() {
           [
             {
               text: 'OK',
-              onPress: () => {
-                // Navigate to success page or back to payments
-                if (paymentType === 'monthly_bill') {
+              onPress: async () => {
+                // For special booking payments, create the booking after successful payment
+                if (paymentType === 'special_booking' && bookingData) {
+                  try {
+                    // Use the bookingId from the payment response
+                    const bookingDataWithId = {
+                      ...bookingData,
+                      bookingId: paymentData.bookingId || `booking_${Date.now()}`,
+                    };
+                    
+                    const bookingResult = await createBooking(bookingDataWithId);
+                    if (bookingResult.success) {
+                      router.push({
+                        pathname: '/customer/payment-success',
+                        params: {
+                          paymentId: paymentData.paymentId,
+                          amount: calculation.total,
+                          type: paymentType,
+                          bookingCreated: 'true',
+                        },
+                      });
+                    } else {
+                      // Payment succeeded but booking failed
+                      showAlert('Warning', 'Payment was successful but there was an issue creating your booking. Please contact support.');
+                      router.replace('/customer/payments');
+                    }
+                  } catch (error) {
+                    console.error('Error creating booking after payment:', error);
+                    showAlert('Warning', 'Payment was successful but there was an issue creating your booking. Please contact support.');
+                    router.replace('/customer/payments');
+                  }
+                } else if (paymentType === 'monthly_bill') {
                   router.replace('/customer/payments');
                 } else {
                   router.push({

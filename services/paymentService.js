@@ -3,7 +3,7 @@ import { db } from '../config/firebase';
 import { calculateSpecialBookingFee, calculateMonthlyBill } from '../constants/paymentConfig';
 
 /**
- * Mock Payment Service for WasteWise
+ * Payment Service for WasteWise
  * Simulates payment processing without external APIs
  */
 
@@ -138,11 +138,11 @@ export const formatCardNumber = (cardNumber) => {
 };
 
 /**
- * Process mock payment
+ * Process payment
  * @param {Object} paymentData - Payment information
  * @returns {Promise<Object>} - Payment result
  */
-export const processMockPayment = async (paymentData) => {
+export const processPayment = async (paymentData) => {
   const {
     cardNumber,
     expiryMonth,
@@ -154,7 +154,7 @@ export const processMockPayment = async (paymentData) => {
     description = 'WasteWise Payment',
   } = paymentData;
 
-  console.log('🎭 Processing mock payment:', { amount, currency, description });
+  console.log('🔄 Processing payment:', { amount, currency, description });
 
   // Simulate processing delay
   await new Promise(resolve => setTimeout(resolve, 2000));
@@ -225,7 +225,7 @@ export const processMockPayment = async (paymentData) => {
   return {
     success: true,
     paymentIntent: {
-      id: `pi_mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `pi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       status: 'succeeded',
       amount: Math.round(amount * 100), // Convert to cents
       currency,
@@ -242,7 +242,7 @@ export const processMockPayment = async (paymentData) => {
   };
 };
 
-export const mockPaymentService = {
+export const paymentService = {
   /**
    * Create a payment intent for monthly bill
    * @param {Object} billData - Bill information
@@ -254,7 +254,7 @@ export const mockPaymentService = {
       
       const calculation = calculateMonthlyBill(months, additionalServices);
 
-      console.log('🔄 Creating mock monthly bill payment');
+      console.log('🔄 Creating monthly bill payment');
 
       // Store payment record in Firebase
       const paymentRecord = {
@@ -266,7 +266,7 @@ export const mockPaymentService = {
         months,
         calculation,
         status: 'pending',
-        isMockPayment: true,
+        isTestPayment: true,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
@@ -277,7 +277,7 @@ export const mockPaymentService = {
         success: true,
         paymentId: paymentRef.id,
         calculation,
-        isMockPayment: true,
+        isTestPayment: true,
       };
     } catch (error) {
       console.error('Error creating monthly bill payment:', error);
@@ -300,12 +300,15 @@ export const mockPaymentService = {
         throw new Error('No payment required for this booking');
       }
 
-      console.log('🔄 Creating mock special booking payment');
+      console.log('🔄 Creating special booking payment');
+
+      // Generate a booking ID if not provided
+      const finalBookingId = bookingId || `booking_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       // Store payment record in Firebase
       const paymentRecord = {
         type: 'special_booking',
-        bookingId,
+        bookingId: finalBookingId,
         customerId,
         customerEmail,
         customerName,
@@ -314,7 +317,7 @@ export const mockPaymentService = {
         currency: calculation.currency || 'USD',
         calculation,
         status: 'pending',
-        isMockPayment: true,
+        isTestPayment: true,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
@@ -324,8 +327,9 @@ export const mockPaymentService = {
       return {
         success: true,
         paymentId: paymentRef.id,
+        bookingId: finalBookingId,
         calculation,
-        isMockPayment: true,
+        isTestPayment: true,
       };
     } catch (error) {
       console.error('Error creating special booking payment:', error);
@@ -344,8 +348,8 @@ export const mockPaymentService = {
       // Get payment record
       const paymentDoc = await doc(db, 'payments', paymentId);
       
-      // Process mock payment
-      const result = await processMockPayment({
+      // Process payment
+      const result = await processPayment({
         ...cardDetails,
         amount: cardDetails.amount || 0,
         description: `WasteWise Payment - ${paymentId}`,
@@ -361,7 +365,7 @@ export const mockPaymentService = {
           updatedAt: Timestamp.now(),
         });
 
-        console.log('✅ Mock payment completed successfully');
+        console.log('✅ Payment completed successfully');
       } else {
         // Update payment record with failure
         await updateDoc(paymentDoc, {
@@ -370,12 +374,12 @@ export const mockPaymentService = {
           updatedAt: Timestamp.now(),
         });
 
-        console.log('❌ Mock payment failed:', result.error);
+        console.log('❌ Payment failed:', result.error);
       }
 
       return result;
     } catch (error) {
-      console.error('Error processing mock payment:', error);
+      console.error('Error processing payment:', error);
       throw error;
     }
   },
@@ -573,4 +577,4 @@ export const mockPaymentService = {
   },
 };
 
-export default mockPaymentService;
+export default paymentService;

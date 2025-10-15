@@ -8,12 +8,13 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../../config/firebase';
-import { mockPaymentService } from '../../services/mockPaymentService';
+import { paymentService } from '../../services/paymentService';
 import { formatCurrency, calculateMonthlyBill } from '../../constants/paymentConfig';
 
 export default function Payments() {
@@ -23,22 +24,37 @@ export default function Payments() {
   const [currentMonthStatus, setCurrentMonthStatus] = useState(null);
   const [outstandingBalance, setOutstandingBalance] = useState(null);
   const [recentPayments, setRecentPayments] = useState([]);
+  const [allPayments, setAllPayments] = useState([]);
+  const [showAllPayments, setShowAllPayments] = useState(false);
   const [selectedMonths, setSelectedMonths] = useState(1);
+  
+  // Month/Year selector modal states
+  const [showMonthYearModal, setShowMonthYearModal] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const currentUser = auth.currentUser;
+
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const YEARS = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - 1 + i);
 
   const loadPaymentData = async () => {
     if (!currentUser) return;
 
     try {
       const [monthStatus, balance, payments] = await Promise.all([
-        mockPaymentService.getCurrentMonthPaymentStatus(currentUser.uid),
-        mockPaymentService.getOutstandingBalance(currentUser.uid),
-        mockPaymentService.getCustomerPayments(currentUser.uid),
+        paymentService.getCurrentMonthPaymentStatus(currentUser.uid),
+        paymentService.getOutstandingBalance(currentUser.uid),
+        paymentService.getCustomerPayments(currentUser.uid),
       ]);
 
       setCurrentMonthStatus(monthStatus);
       setOutstandingBalance(balance);
+      setAllPayments(payments);
       setRecentPayments(payments.slice(0, 5)); // Show only recent 5
     } catch (error) {
       console.error('Error loading payment data:', error);
@@ -72,8 +88,31 @@ export default function Payments() {
     }
   };
 
+  const handlePaySpecificMonth = () => {
+    try {
+      const calculation = calculateMonthlyBill(1);
+      
+      router.push({
+        pathname: '/customer/process-payment',
+        params: {
+          paymentType: 'monthly_bill',
+          billData: JSON.stringify({
+            months: 1,
+            specificMonth: selectedMonth,
+            specificYear: selectedYear,
+            additionalServices: [],
+          }),
+        },
+      });
+    } catch (error) {
+      console.error('Error initiating specific month payment:', error);
+      Alert.alert('Error', 'Failed to start payment process');
+    }
+    setShowMonthYearModal(false);
+  };
+
   const handleViewPaymentHistory = () => {
-    router.push('/customer/payment-history');
+    setShowAllPayments(!showAllPayments);
   };
 
   const getPaymentStatusColor = (status) => {
@@ -172,7 +211,7 @@ export default function Payments() {
         </View>
 
         {/* Outstanding Balance */}
-        {outstandingBalance && outstandingBalance.totalOutstanding > 0 && (
+        {/* {outstandingBalance && outstandingBalance.totalOutstanding > 0 && (
           <View style={[styles.card, styles.balanceCard]}>
             <View style={styles.cardHeader}>
               <Ionicons name="wallet" size={24} color="#F44336" />
@@ -185,7 +224,7 @@ export default function Payments() {
               {outstandingBalance.paymentsCount} pending payment{outstandingBalance.paymentsCount !== 1 ? 's' : ''}
             </Text>
           </View>
-        )}
+        )} */}
 
         {/* Monthly Bill Payment */}
         <View style={styles.card}>
@@ -249,17 +288,30 @@ export default function Payments() {
               Pay {formatCurrency(monthlyCalculation.total)}
             </Text>
           </TouchableOpacity>
+
+          {/* Pay Specific Month Button */}
+          <TouchableOpacity 
+            style={[styles.payButton, styles.secondaryPayButton]} 
+            onPress={() => setShowMonthYearModal(true)}
+          >
+            <Ionicons name="calendar-outline" size={20} color="#4CAF50" />
+            <Text style={[styles.payButtonText, styles.secondaryPayButtonText]}>
+              Pay Specific Month
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Recent Payments */}
-        {recentPayments.length > 0 && (
+        {/* Payment History */}
+        {(showAllPayments ? allPayments : recentPayments).length > 0 && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Ionicons name="time" size={24} color="#4CAF50" />
-              <Text style={styles.cardTitle}>Recent Payments</Text>
+              <Text style={styles.cardTitle}>
+                {showAllPayments ? 'All Payments' : 'Recent Payments'}
+              </Text>
             </View>
 
-            {recentPayments.map((payment) => (
+            {(showAllPayments ? allPayments : recentPayments).map((payment) => (
               <TouchableOpacity
                 key={payment.id}
                 style={styles.paymentItem}
@@ -305,12 +357,114 @@ export default function Payments() {
               style={styles.viewAllButton}
               onPress={handleViewPaymentHistory}
             >
-              <Text style={styles.viewAllText}>View All Payments</Text>
-              <Ionicons name="chevron-forward" size={16} color="#4CAF50" />
+              <Text style={styles.viewAllText}>
+                {showAllPayments ? 'Show Recent Only' : 'View All Payments'}
+              </Text>
+              <Ionicons 
+                name={showAllPayments ? "chevron-up" : "chevron-forward"} 
+                size={16} 
+                color="#4CAF50" 
+              />
             </TouchableOpacity>
           </View>
         )}
       </ScrollView>
+
+      {/* Month/Year Selection Modal */}
+      <Modal
+        visible={showMonthYearModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMonthYearModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Month & Year</Text>
+              <TouchableOpacity onPress={() => setShowMonthYearModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.selectorContainer}>
+              <View style={styles.selectorColumn}>
+                <Text style={styles.selectorLabel}>Month</Text>
+                <ScrollView style={styles.scrollSelector} showsVerticalScrollIndicator={false}>
+                  {MONTHS.map((month, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.selectorOption,
+                        selectedMonth === index && styles.selectorOptionSelected,
+                      ]}
+                      onPress={() => setSelectedMonth(index)}
+                    >
+                      <Text
+                        style={[
+                          styles.selectorOptionText,
+                          selectedMonth === index && styles.selectorOptionTextSelected,
+                        ]}
+                      >
+                        {month}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <View style={styles.selectorColumn}>
+                <Text style={styles.selectorLabel}>Year</Text>
+                <ScrollView style={styles.scrollSelector} showsVerticalScrollIndicator={false}>
+                  {YEARS.map((year) => (
+                    <TouchableOpacity
+                      key={year}
+                      style={[
+                        styles.selectorOption,
+                        selectedYear === year && styles.selectorOptionSelected,
+                      ]}
+                      onPress={() => setSelectedYear(year)}
+                    >
+                      <Text
+                        style={[
+                          styles.selectorOptionText,
+                          selectedYear === year && styles.selectorOptionTextSelected,
+                        ]}
+                      >
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+
+            <View style={styles.modalSummary}>
+              <Text style={styles.modalSummaryText}>
+                Payment for {MONTHS[selectedMonth]} {selectedYear}
+              </Text>
+              <Text style={styles.modalAmountText}>
+                {formatCurrency(calculateMonthlyBill(1).total)}
+              </Text>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setShowMonthYearModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalConfirmButton]}
+                onPress={handlePaySpecificMonth}
+              >
+                <Text style={styles.modalConfirmText}>Continue to Payment</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -490,6 +644,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+  secondaryPayButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    marginTop: 12,
+  },
+  secondaryPayButtonText: {
+    color: '#4CAF50',
+  },
   paymentItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -539,5 +702,115 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#4CAF50',
     marginRight: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  selectorContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  selectorColumn: {
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  selectorLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  scrollSelector: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#f8f9fa',
+    maxHeight: 120,
+  },
+  selectorOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  selectorOptionSelected: {
+    backgroundColor: '#4CAF50',
+  },
+  selectorOptionText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
+  selectorOptionTextSelected: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  modalSummary: {
+    backgroundColor: '#f8f9fa',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  modalSummaryText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 4,
+  },
+  modalAmountText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 6,
+  },
+  modalCancelButton: {
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  modalConfirmButton: {
+    backgroundColor: '#4CAF50',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  modalConfirmText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
   },
 });

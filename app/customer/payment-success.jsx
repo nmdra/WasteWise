@@ -22,12 +22,15 @@ export default function PaymentSuccessfulScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  const { paymentId, amount, type, cardLast4 } = params;
+  const { paymentId, amount, type, cardLast4, bookingCreated } = params;
 
   const getSuccessMessage = () => {
     if (type === 'monthly_bill') {
       return 'Your monthly bill payment has been processed successfully.';
     } else if (type === 'special_booking') {
+      if (bookingCreated === 'true') {
+        return 'Your special pickup payment has been processed and your booking has been created successfully.';
+      }
       return 'Your special pickup booking payment has been confirmed.';
     }
     return 'Your payment has been processed successfully.';
@@ -46,7 +49,7 @@ export default function PaymentSuccessfulScreen() {
     if (type === 'monthly_bill') {
       return '/customer/payments';
     } else if (type === 'special_booking') {
-      return '/customer/special-pickup';
+      return '/customer/my-bookings';
     }
     return '/customer/home';
   };
