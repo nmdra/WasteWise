@@ -1,14 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
-import { Alert, ScrollView, Share, StyleSheet, Text, View, ActivityIndicator, Platform } from 'react-native';
+import { Alert, ScrollView, Share, StyleSheet, Text, View, ActivityIndicator, Platform, Modal, TextInput, TouchableOpacity } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { Ionicons } from '@expo/vector-icons';
 import AppHeader from '../../components/app-header';
 import Button from '../../components/customer/Button';
 import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme';
-import { getBinById, BIN_CATEGORIES } from '../../services/binService.optimized';
+import { getBinById, updateBin, deleteBinCompletely, BIN_CATEGORIES } from '../../services/binService.optimized';
 
 export default function MyQR() {
   const router = useRouter();
@@ -18,6 +19,8 @@ export default function MyQR() {
   const [userId, setUserId] = useState('');
   const [bin, setBin] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editingBin, setEditingBin] = useState(null);
+  const [deletingBin, setDeletingBin] = useState(false);
   const qrRef = useRef(null);
 
   useEffect(() => {
@@ -125,6 +128,79 @@ export default function MyQR() {
       'Print QR Code',
       'You can:\n\n1. Take a screenshot of this QR code\n2. Share it to your device\n3. Print it from your device\n4. Paste it on your waste bin\n\nMake sure the QR code is clearly visible!',
       [{ text: 'OK' }]
+    );
+  };
+
+  const handleEditBin = () => {
+    if (!bin) return;
+    setEditingBin({
+      ...bin,
+      description: bin.description || '',
+      location: bin.location || '',
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingBin) return;
+
+    try {
+      const updates = {
+        category: editingBin.category,
+        description: editingBin.description.trim(),
+        location: editingBin.location.trim(),
+      };
+
+      const result = await updateBin(editingBin.id, updates);
+
+      if (result.success) {
+        Alert.alert('Success', 'Bin updated successfully');
+        setEditingBin(null);
+        // Refresh bin data
+        await loadBinData();
+      } else {
+        Alert.alert('Error', 'Failed to update bin');
+      }
+    } catch (error) {
+      console.error('Error updating bin:', error);
+      Alert.alert('Error', 'Failed to update bin');
+    }
+  };
+
+  const handleDeleteBin = () => {
+    if (!bin) return;
+
+    Alert.alert(
+      'Delete Bin',
+      `Are you sure you want to delete bin "${bin.binId}"? This action cannot be undone and will remove the bin from all future collection schedules.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingBin(true);
+              const result = await deleteBinCompletely(bin.id);
+
+              if (result.success) {
+                Alert.alert('Success', 'Bin deleted successfully', [
+                  {
+                    text: 'OK',
+                    onPress: () => router.replace('/customer/bins')
+                  }
+                ]);
+              } else {
+                Alert.alert('Error', 'Failed to delete bin');
+              }
+            } catch (error) {
+              console.error('Error deleting bin:', error);
+              Alert.alert('Error', 'Failed to delete bin');
+            } finally {
+              setDeletingBin(false);
+            }
+          }
+        }
+      ]
     );
   };
 
@@ -244,6 +320,26 @@ export default function MyQR() {
             icon="🔄"
           />
           
+          {bin && (
+            <View style={styles.managementActions}>
+              <Button
+                title="Edit Bin"
+                onPress={handleEditBin}
+                variant="outline"
+                icon="✏️"
+                style={styles.managementButton}
+              />
+              <Button
+                title="Delete Bin"
+                onPress={handleDeleteBin}
+                variant="outline"
+                icon="🗑️"
+                style={[styles.managementButton, styles.deleteButton]}
+                disabled={deletingBin}
+              />
+            </View>
+          )}
+          
           <View style={styles.actionRow}>
             <Button
               title="Share"
@@ -324,6 +420,91 @@ export default function MyQR() {
 
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>
+      )}
+
+      {/* Edit Bin Modal */}
+      {editingBin && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setEditingBin(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, styles.editModalContent]}>
+              <Text style={styles.modalTitle}>Edit Bin Details</Text>
+              
+              <View style={styles.editForm}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Bin Code</Text>
+                  <Text style={styles.binCodeDisplay}>{editingBin.binId}</Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Category</Text>
+                  <View style={styles.categorySelector}>
+                    {Object.entries(BIN_CATEGORIES).map(([key, category]) => (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          styles.categoryOption,
+                          editingBin.category === key && styles.categoryOptionSelected
+                        ]}
+                        onPress={() => setEditingBin({...editingBin, category: key})}
+                      >
+                        <Text style={styles.categoryEmoji}>{category.icon}</Text>
+                        <Text style={[
+                          styles.categoryLabel,
+                          editingBin.category === key && styles.categoryLabelSelected
+                        ]}>
+                          {category.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Description (Optional)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={editingBin.description}
+                    onChangeText={(text) => setEditingBin({...editingBin, description: text})}
+                    placeholder="Add a description for this bin"
+                    multiline
+                    numberOfLines={2}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Location (Optional)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={editingBin.location}
+                    onChangeText={(text) => setEditingBin({...editingBin, location: text})}
+                    placeholder="Where is this bin located?"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setEditingBin(null)}
+                >
+                  <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonConfirm]}
+                  onPress={handleSaveEdit}
+                >
+                  <Text style={styles.modalButtonTextConfirm}>Save Changes</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
     </View>
   );
@@ -476,6 +657,17 @@ const styles = StyleSheet.create({
   actions: {
     marginBottom: Spacing.xl,
   },
+  managementActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  managementButton: {
+    flex: 1,
+  },
+  deleteButton: {
+    borderColor: Colors.state.error,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: Spacing.md,
@@ -549,5 +741,129 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: Radii.lg,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: FontSizes.h2,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  modalButton: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: Radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#E5E7EB',
+  },
+  modalButtonConfirm: {
+    backgroundColor: Colors.primary,
+  },
+  modalButtonTextCancel: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  modalButtonTextConfirm: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  // Edit modal styles
+  editModalContent: {
+    maxHeight: '80%',
+  },
+  editForm: {
+    marginBottom: Spacing.lg,
+  },
+  inputGroup: {
+    marginBottom: Spacing.lg,
+  },
+  inputLabel: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: Colors.line,
+    borderRadius: Radii.small,
+    padding: Spacing.md,
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    backgroundColor: Colors.bg.light,
+    minHeight: 40,
+  },
+  binCodeDisplay: {
+    fontSize: FontSizes.body,
+    fontFamily: 'monospace',
+    color: Colors.text.secondary,
+    backgroundColor: Colors.bg.light,
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  categorySelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  categoryOption: {
+    flex: 1,
+    minWidth: 80,
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    backgroundColor: Colors.bg.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryOptionSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.brand.lightGreen,
+  },
+  categoryEmoji: {
+    fontSize: 20,
+    marginBottom: Spacing.xs,
+  },
+  categoryLabel: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+  },
+  categoryLabelSelected: {
+    color: Colors.primary,
+    fontWeight: '600',
   },
 });

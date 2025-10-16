@@ -8,6 +8,7 @@ import { Colors, FontSizes, Radii, Spacing } from '../../constants/customerTheme
 import { getUserProfile } from '../../services/auth';
 import { MockCustomer } from '../../services/mockCustomerApi';
 import { formatScheduleDate, formatTimeRange, wasteTypeIcons, getSchedulesForUser } from '../../services/scheduleService';
+import { collectionService } from '../../services/collectionService';
 
 export default function CustomerHome() {
   const router = useRouter();
@@ -22,6 +23,8 @@ export default function CustomerHome() {
   const [scheduleLoading, setScheduleLoading] = useState(true);
   const [userSchedules, setUserSchedules] = useState([]);
   const [nextPickup, setNextPickup] = useState(null);
+  const [recentCollections, setRecentCollections] = useState([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(true);
 
   const loadData = async () => {
     try {
@@ -64,24 +67,6 @@ export default function CustomerHome() {
     }
   };
 
-  const loadNextSchedule = async () => {
-    try {
-      setScheduleLoading(true);
-      // Wait for user info to load first
-      if (!userInfo.zone) {
-        await loadUserInfo();
-      }
-      
-      const userZone = userInfo.zone || 'A';
-      const schedule = await getNextSchedule(userZone);
-      setNextSchedule(schedule);
-    } catch (error) {
-      console.error('Error loading next schedule:', error);
-    } finally {
-      setScheduleLoading(false);
-    }
-  };
-
   const loadUserSchedules = async () => {
     try {
       if (!user) return;
@@ -117,8 +102,33 @@ export default function CustomerHome() {
       }
       
       setNextPickup(nextPickupData);
+      
+      // Set the next schedule for the collection schedule section
+      if (schedules.length > 0) {
+        setNextSchedule(schedules[0]); // Use the first upcoming schedule
+      } else {
+        setNextSchedule(null);
+      }
+      
+      setScheduleLoading(false);
     } catch (error) {
       console.error('Error loading user schedules:', error);
+      setScheduleLoading(false);
+    }
+  };
+
+  const loadRecentCollections = async () => {
+    try {
+      if (!user) return;
+      
+      const collections = await collectionService.getCollectionsByOwner(user.uid);
+      // Get only the 3 most recent collections
+      const recentThree = collections.slice(0, 3);
+      setRecentCollections(recentThree);
+      setCollectionsLoading(false);
+    } catch (error) {
+      console.error('Error loading recent collections:', error);
+      setCollectionsLoading(false);
     }
   };
 
@@ -138,15 +148,15 @@ export default function CustomerHome() {
   useEffect(() => {
     loadData();
     loadUserInfo();
-    loadNextSchedule();
     loadUserSchedules();
+    loadRecentCollections();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadData();
-    loadNextSchedule();
     loadUserSchedules();
+    loadRecentCollections();
   };
 
   if (loading) {
@@ -357,18 +367,31 @@ export default function CustomerHome() {
               <Text style={styles.seeAll}>See All →</Text>
             </TouchableOpacity>
           </View>
-          {data?.recent?.slice(0, 3).map((item) => (
-            <ListItem
-              key={item.id}
-              leftIcon="✓"
-              title={formatDate(item.date)}
-              subtitle={`${item.weightKg} kg • ${item.types?.join(', ')}`}
-              rightText={item.status}
-              badge={item.status === 'completed' ? 'Completed' : item.status}
-              badgeColor={Colors.status.completed}
-              onPress={() => router.push('/customer/activity')}
-            />
-          ))}
+          {collectionsLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading recent collections...</Text>
+            </View>
+          ) : recentCollections.length > 0 ? (
+            recentCollections.map((collection) => (
+              <ListItem
+                key={collection.id}
+                leftIcon="✓"
+                title={formatDate(collection.collectedAt)}
+                subtitle={`${collection.weight ? collection.weight + ' kg • ' : ''}${collection.wasteTypes?.join(', ') || 'General Waste'}`}
+                rightText={collection.status || 'collected'}
+                badge={collection.status === 'collected' ? 'Completed' : collection.status}
+                badgeColor={Colors.status.completed}
+                onPress={() => router.push('/customer/activity')}
+              />
+            ))
+          ) : (
+            <View style={styles.noActivityCard}>
+              <Text style={styles.noActivityText}>No recent collections</Text>
+              <Text style={styles.noActivitySubtext}>
+                Your collection history will appear here
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* More Services */}
@@ -670,5 +693,25 @@ const styles = StyleSheet.create({
     color: Colors.brand.green,
     fontWeight: '700',
     fontSize: FontSizes.body,
+  },
+  noActivityCard: {
+    backgroundColor: Colors.bg.card,
+    padding: Spacing.lg,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    alignItems: 'center',
+  },
+  noActivityText: {
+    fontSize: FontSizes.h3,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    textAlign: 'center',
+  },
+  noActivitySubtext: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
   },
 });

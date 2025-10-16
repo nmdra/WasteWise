@@ -174,14 +174,34 @@ export default function CreateBooking() {
     };
 
     if (calculation.total > 0) {
-      // Navigate to payment screen for paid bookings
-      router.push({
-        pathname: '/customer/process-payment',
-        params: {
-          paymentType: 'special_booking',
-          bookingData: JSON.stringify(bookingData),
-        },
-      });
+      // Show payment options for paid bookings
+      Alert.alert(
+        'Payment Options',
+        `Your special pickup will cost ${formatCurrency(calculation.total)}. How would you like to proceed?`,
+        [
+          {
+            text: 'Pay Now',
+            onPress: () => {
+              router.push({
+                pathname: '/customer/process-payment',
+                params: {
+                  paymentType: 'special_booking',
+                  bookingData: JSON.stringify(bookingData),
+                },
+              });
+            },
+          },
+          {
+            text: 'Add to Bill',
+            onPress: () => handleAddToBill(bookingData, calculation),
+            style: 'default',
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
     } else {
       // Create booking directly for free waste types
       setSaving(true);
@@ -213,6 +233,62 @@ export default function CreateBooking() {
       } finally {
         setSaving(false);
       }
+    }
+  };
+
+  const handleAddToBill = async (bookingData, calculation) => {
+    setSaving(true);
+    
+    try {
+      // First create the booking with pending payment status
+      const bookingDataWithStatus = {
+        ...bookingData,
+        status: 'pending_payment', // Special status for bookings waiting for payment
+      };
+
+      const bookingResult = await createBooking(bookingDataWithStatus);
+
+      if (!bookingResult.success) {
+        Alert.alert('Error', 'Failed to create booking. Please try again.');
+        return;
+      }
+
+      // Now create the payment record linked to the booking
+      const { paymentService } = await import('../../services/mockPaymentService');
+      
+      const paymentResult = await paymentService.createSpecialBookingPayment({
+        ...bookingData,
+        bookingId: bookingResult.bookingId || bookingResult.id,
+        customerId: user.uid,
+        customerEmail: user.email,
+        customerName: userProfile.displayName || userProfile.firstName || 'Customer',
+      });
+
+      if (paymentResult.success) {
+        Alert.alert(
+          'Added to Bill',
+          `Your special pickup booking has been created and added to your bill for ${formatCurrency(calculation.total)}. You can pay it later from your bills page.`,
+          [
+            {
+              text: 'View Bills',
+              onPress: () => router.push('/customer/my-bills'),
+            },
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } else {
+        // Payment creation failed, but booking was created
+        // This is a partial success - booking exists but no bill entry
+        Alert.alert('Warning', 'Booking was created but there was an issue adding it to your bill. Please contact support.');
+      }
+    } catch (error) {
+      console.error('Error adding booking to bill:', error);
+      Alert.alert('Error', 'Failed to add booking to bill. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 

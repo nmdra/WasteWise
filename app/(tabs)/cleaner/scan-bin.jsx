@@ -1,12 +1,14 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { collection, collectionGroup, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { collection, collectionGroup, getDocs, query, updateDoc, where, doc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Modal, TextInput, ScrollView } from 'react-native';
 import AppHeader from '../../../components/app-header';
 import { auth, db } from '../../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
 import { collectionService } from '../../../services/collectionService';
+import { getBinById, updateBinStatus } from '../../../services/binService.optimized';
+import { updateStop } from '../../../services/stopsService';
 
 export default function ScanBinScreen() {
   const router = useRouter();
@@ -14,6 +16,15 @@ export default function ScanBinScreen() {
   const [scanning, setScanning] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  
+  // New state for form workflow
+  const [showForm, setShowForm] = useState(false);
+  const [binDetails, setBinDetails] = useState(null);
+  const [scannedBinId, setScannedBinId] = useState(null);
+  const [formData, setFormData] = useState({
+    weight: '',
+    notes: '',
+  });
 
   useEffect(() => {
     if (!permission) {
@@ -29,22 +40,73 @@ export default function ScanBinScreen() {
     setProcessing(true);
 
     try {
-      // Parse QR code data (assuming it contains bin information)
+      // Parse QR code data
       let qrData;
       try {
         qrData = JSON.parse(data);
       } catch (parseError) {
-        // If not JSON, try to extract binId from string
         qrData = { binId: data };
       }
 
-      const scannedBinId = qrData.binId || data;
-      console.log('🔍 Scanned Bin ID:', scannedBinId);
-
-      // Search for stops across ALL schedules that contain this bin
-      console.log('🔍 Searching for stops with binId:', scannedBinId);
+      const binId = qrData.binId || data;
+      console.log('🔍 Scanned Bin ID:', binId);
       
-      // Use collectionGroup to search stops across all schedules
+      // Fetch bin details from Firebase
+      const bin = await getBinById(binId);
+      
+      if (!bin) {
+        Alert.alert(
+          'Bin Not Found',
+          `Could not find bin with ID: ${binId}`,
+          [{ 
+            text: 'Try Again', 
+            onPress: resetScanner
+          }]
+        );
+        return;
+      }
+
+      console.log('✅ Loaded bin details:', bin);
+      
+      // Store bin details and show form
+      setBinDetails(bin);
+      setScannedBinId(binId);
+      setShowForm(true);
+
+    } catch (error) {
+      console.error('❌ Scan error:', error);
+      Alert.alert(
+        'Scan Error',
+        `Failed to load bin details: ${error.message}`,
+        [{ 
+          text: 'Try Again', 
+          onPress: resetScanner
+        }]
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const resetScanner = () => {
+    setScanned(false);
+    setScanning(true);
+    setProcessing(false);
+    setShowForm(false);
+    setBinDetails(null);
+    setScannedBinId(null);
+    setFormData({ weight: '', notes: '' });
+  };
+
+  const handleConfirmCollection = async () => {
+    if (!binDetails || !scannedBinId) return;
+
+    setProcessing(true);
+
+    try {
+      console.log('🔍 Searching for stops containing bin:', scannedBinId);
+      
+      // Search for stops across ALL schedules that contain this bin
       const stopsQuery = query(
         collectionGroup(db, 'stops'),
         where('status', '==', 'pending')
@@ -53,107 +115,115 @@ export default function ScanBinScreen() {
       const stopsSnapshot = await getDocs(stopsQuery);
       console.log('📍 Found', stopsSnapshot.size, 'pending stops total');
 
-      let foundStop = null;
-      let scheduleId = null;
+      const matchingStops = [];
 
-      // Search through all stops to find one with matching binId
+      // Find all stops that contain this binId
       for (const stopDoc of stopsSnapshot.docs) {
         const stopData = stopDoc.data();
         
-        // Check both old format (single bin) and new format (bins array)
-        let binMatch = false;
-        
+        // Check if bins array contains this binId
         if (stopData.bins && Array.isArray(stopData.bins)) {
-          // New format: bins is an array
-          binMatch = stopData.bins.some(bin => bin.binId === scannedBinId);
-        } else if (stopData.binId === scannedBinId) {
-          // Old format: single binId field
-          binMatch = true;
-        }
-
-        if (binMatch) {
-          foundStop = {
-            id: stopDoc.id,
-            ref: stopDoc.ref,
-            ...stopData
-          };
-          // Get schedule ID from the document path
-          scheduleId = stopDoc.ref.parent.parent.id;
-          console.log('✅ Found matching stop:', foundStop.id, 'in schedule:', scheduleId);
-          break;
+          const hasBin = stopData.bins.some(bin => bin.binId === scannedBinId);
+          
+          if (hasBin) {
+            const scheduleId = stopDoc.ref.parent.parent.id;
+            matchingStops.push({
+              stopId: stopDoc.id,
+              scheduleId: scheduleId,
+              stopRef: stopDoc.ref,
+              stopData: stopData
+            });
+            console.log('✅ Found matching stop:', stopDoc.id, 'in schedule:', scheduleId);
+          }
         }
       }
 
-      if (!foundStop) {
+      if (matchingStops.length === 0) {
         Alert.alert(
-          'Stop Not Found',
-          `No pending collection stop found for bin ${scannedBinId}. This bin may not be scheduled for collection.`,
-          [{ 
-            text: 'Try Again', 
-            onPress: () => {
-              setScanned(false);
-              setScanning(true);
-              setProcessing(false);
-            }
-          }]
+          'No Stops Found',
+          `No pending collection stops found for bin ${binDetails.binCode || scannedBinId}. This bin may not be scheduled for collection.`,
+          [{ text: 'OK', onPress: resetScanner }]
         );
         return;
       }
 
-      // Mark the stop as collected
-      console.log('📝 Updating stop status to collected...');
-      await updateDoc(foundStop.ref, {
-        status: 'collected',
-        collectedAt: new Date(),
-        collectedBy: auth.currentUser?.uid || 'cleaner',
+      console.log(`📝 Updating ${matchingStops.length} stop(s) to collected...`);
+
+      // Mark all matching stops as collected
+      const updatePromises = matchingStops.map(async (stop) => {
+        await updateDoc(stop.stopRef, {
+          status: 'collected',
+          collectedAt: new Date(),
+          collectedBy: auth.currentUser?.uid || 'cleaner',
+          notes: formData.notes || ''
+        });
       });
 
-      // Create collection record
+      await Promise.all(updatePromises);
+      console.log('✅ All stops marked as collected');
+
+      // Create collection record (this also increments scan count and updates lastScanned)
       const collectionData = {
-        stopId: foundStop.id,
-        scheduleId: scheduleId,
         binId: scannedBinId,
+        binDocId: binDetails.id,
+        binCode: binDetails.binCode,
         userId: auth.currentUser?.uid || 'cleaner',
+        ownerId: binDetails.userId,
+        ownerName: binDetails.ownerName || 'Unknown',
         scannedAt: new Date().toISOString(),
-        wasteTypes: qrData.wasteTypes || foundStop.wasteTypes || ['general'],
-        status: 'collected',
-        notes: 'QR scan successful - automatic collection',
         collectedAt: new Date(),
+        wasteTypes: binDetails.wasteTypes || [binDetails.category] || ['general'],
+        status: 'collected',
+        notes: formData.notes || 'QR scan collection',
+        weight: formData.weight ? parseFloat(formData.weight) : null,
+        location: binDetails.location || null,
+        // Include first stop details
+        stopId: matchingStops[0].stopId,
+        scheduleId: matchingStops[0].scheduleId,
       };
 
-      console.log('💾 Creating collection record...');
+      console.log('💾 Creating collection record...', collectionData);
       await collectionService.createCollection(collectionData);
+      console.log('✅ Collection record created');
 
+      // Deactivate the bin after collection
+      console.log('🔒 Deactivating bin...');
+      const deactivateResult = await updateBinStatus(binDetails.id, false);
+      if (deactivateResult.success) {
+        console.log('✅ Bin deactivated successfully');
+      } else {
+        console.warn('⚠️ Failed to deactivate bin:', deactivateResult.error);
+      }
+
+      // Success message
       Alert.alert(
         'Collection Recorded ✅',
-        `Bin ${scannedBinId} has been marked as collected!\n\nSchedule: ${scheduleId}\nStop: ${foundStop.id}`,
-        [{
-          text: 'Done',
-          onPress: () => router.back()
-        },
-        {
-          text: 'Scan Another',
-          onPress: () => {
-            setScanned(false);
-            setScanning(true);
-            setProcessing(false);
+        `Bin ${binDetails.binCode || scannedBinId} has been collected!\n\n` +
+        `Stops Updated: ${matchingStops.length}\n` +
+        `Weight: ${formData.weight ? formData.weight + ' kg' : 'Not specified'}\n` +
+        `Owner: ${binDetails.ownerName || 'Unknown'}\n` +
+        `Status: Bin deactivated and scan count updated`,
+        [
+          {
+            text: 'Done',
+            onPress: () => {
+              resetScanner();
+              router.back();
+            }
+          },
+          {
+            text: 'Scan Another',
+            onPress: resetScanner
           }
-        }]
+        ]
       );
 
     } catch (error) {
-      console.error('❌ Scan error:', error);
+      console.error('❌ Collection error:', error);
       Alert.alert(
-        'Scan Error',
-        `Failed to process QR code: ${error.message}`,
-        [{ 
-          text: 'Try Again', 
-          onPress: () => {
-            setScanned(false);
-            setScanning(true);
-            setProcessing(false);
-          }
-        }]
+        'Collection Error',
+        `Failed to record collection: ${error.message}`,
+        [{ text: 'OK' }]
       );
     } finally {
       setProcessing(false);
@@ -224,10 +294,10 @@ export default function ScanBinScreen() {
           <Text style={styles.infoTitle}>How It Works</Text>
           <Text style={styles.infoText}>
             • Point camera at any bin's QR code{'\n'}
-            • System automatically finds the stop in all schedules{'\n'}
-            • Stop is marked as collected{'\n'}
-            • Collection record is created{'\n'}
-            • Works for any scheduled bin
+            • Review bin details and fill collection form{'\n'}
+            • Confirm to mark as collected{'\n'}
+            • All related stops are automatically updated{'\n'}
+            • Collection record is created
           </Text>
         </View>
 
@@ -238,6 +308,97 @@ export default function ScanBinScreen() {
           <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Collection Form Modal */}
+      <Modal
+        visible={showForm}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowForm(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Collection Details</Text>
+              
+              {binDetails && (
+                <View style={styles.binInfo}>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Bin Code:</Text>
+                    <Text style={styles.infoValue}>{binDetails.binCode}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Category:</Text>
+                    <Text style={styles.infoValue}>{binDetails.category || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Owner:</Text>
+                    <Text style={styles.infoValue}>{binDetails.ownerName || 'Unknown'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Location:</Text>
+                    <Text style={styles.infoValue}>{binDetails.location || 'N/A'}</Text>
+                  </View>
+                  {binDetails.description && (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Description:</Text>
+                      <Text style={styles.infoValue}>{binDetails.description}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Weight (kg) - Optional</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter weight in kg"
+                  placeholderTextColor={Colors.text.secondary}
+                  value={formData.weight}
+                  onChangeText={(text) => setFormData({ ...formData, weight: text })}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Notes - Optional</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  placeholder="Add any notes about this collection..."
+                  placeholderTextColor={Colors.text.secondary}
+                  value={formData.notes}
+                  onChangeText={(text) => setFormData({ ...formData, notes: text })}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={resetScanner}
+                  disabled={processing}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton]}
+                  onPress={handleConfirmCollection}
+                  disabled={processing}
+                >
+                  {processing ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.confirmButtonText}>Confirm Collection</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -346,5 +507,105 @@ const styles = StyleSheet.create({
     color: Colors.text.white,
     fontSize: FontSizes.body,
     fontWeight: '600',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
+    padding: Spacing.xl,
+    width: '100%',
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: FontSizes.h2,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  binInfo: {
+    backgroundColor: Colors.bg.light,
+    borderRadius: Radii.btn,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.line,
+  },
+  infoLabel: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+    flex: 1,
+  },
+  infoValue: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    flex: 1,
+    textAlign: 'right',
+  },
+  formGroup: {
+    marginBottom: Spacing.lg,
+  },
+  formLabel: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: Colors.line,
+    borderRadius: Radii.btn,
+    padding: Spacing.md,
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    backgroundColor: Colors.bg.light,
+  },
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: Radii.btn,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  cancelButton: {
+    backgroundColor: Colors.bg.light,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  confirmButton: {
+    backgroundColor: Colors.brand.green,
+  },
+  cancelButtonText: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  confirmButtonText: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.white,
   },
 });

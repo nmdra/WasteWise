@@ -37,7 +37,7 @@ export default function PaymentSuccessfulScreen() {
   };
 
   const getNavigationTitle = () => {
-    if (type === 'monthly_bill') {
+    if (type === 'monthly_bill' || type === 'bill') {
       return 'View Bills';
     } else if (type === 'special_booking') {
       return 'My Bookings';
@@ -46,8 +46,8 @@ export default function PaymentSuccessfulScreen() {
   };
 
   const getNavigationPath = () => {
-    if (type === 'monthly_bill') {
-      return '/customer/payments';
+    if (type === 'monthly_bill' || type === 'bill') {
+      return '/customer/my-bills';
     } else if (type === 'special_booking') {
       return '/customer/my-bookings';
     }

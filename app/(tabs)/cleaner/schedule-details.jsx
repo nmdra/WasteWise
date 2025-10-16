@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -9,18 +9,21 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
+    Modal,
+    TextInput
 } from 'react-native';
 import AppHeader from '../../../components/app-header';
 import { db } from '../../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
-import { wasteTypeIcons } from '../../../services/scheduleService';
+import { wasteTypeIcons, deleteSchedule } from '../../../services/scheduleService';
 import {
     getStopStats,
     markStopAsCollected,
     markStopAsSkipped,
     subscribeToStopsBySchedule,
 } from '../../../services/stopsService';
+import { updateBinStatus } from '../../../services/binService.optimized';
 
 export default function ScheduleDetails() {
   const router = useRouter();
@@ -31,6 +34,10 @@ export default function ScheduleDetails() {
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all, main, customer, pending, collected
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [showStopDetailsModal, setShowStopDetailsModal] = useState(false);
+  const [selectedStop, setSelectedStop] = useState(null);
 
   // Safe navigation helper
   const safeGoBack = () => {
@@ -106,9 +113,34 @@ export default function ScheduleDetails() {
 
   const handleMarkCollected = async (stopId) => {
     const notes = await promptInput('Mark as Collected', 'Add any notes (optional)');
+    
+    // Get the stop data to check for bins
+    const stop = stops.find(s => s.id === stopId);
+    
+    // Mark stop as collected
     const result = await markStopAsCollected(id, stopId, notes || '');
+    
     if (result.success) {
-      Alert.alert('Success', 'Stop marked as collected');
+      // Deactivate all bins associated with this stop
+      if (stop && stop.bins && Array.isArray(stop.bins)) {
+        console.log(`🔒 Deactivating ${stop.bins.length} bin(s) from stop...`);
+        
+        const deactivatePromises = stop.bins.map(async (bin) => {
+          if (bin.binId) {
+            try {
+              await updateBinStatus(bin.binId, false);
+              console.log(`✅ Deactivated bin: ${bin.binCode || bin.binId}`);
+            } catch (error) {
+              console.warn(`⚠️ Failed to deactivate bin ${bin.binId}:`, error);
+            }
+          }
+        });
+        
+        await Promise.all(deactivatePromises);
+        console.log('✅ All bins deactivated');
+      }
+      
+      Alert.alert('Success', 'Stop marked as collected and bins deactivated');
     } else {
       Alert.alert('Error', 'Failed to mark as collected');
     }
@@ -122,6 +154,66 @@ export default function ScheduleDetails() {
     } else {
       Alert.alert('Error', 'Failed to skip stop');
     }
+  };
+
+  const handleEditSchedule = () => {
+    setEditingSchedule({
+      area: schedule.area || '',
+      zone: schedule.zone || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingSchedule.area || !editingSchedule.zone) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
+    }
+
+    try {
+      const scheduleRef = doc(db, 'schedules', id);
+      await updateDoc(scheduleRef, {
+        area: editingSchedule.area,
+        zone: editingSchedule.zone,
+        updatedAt: new Date(),
+      });
+
+      setShowEditModal(false);
+      Alert.alert('Success', 'Schedule updated successfully');
+      loadSchedule(); // Reload schedule data
+    } catch (error) {
+      console.error('Error updating schedule:', error);
+      Alert.alert('Error', 'Failed to update schedule');
+    }
+  };
+
+  const handleDeleteSchedule = () => {
+    Alert.alert(
+      'Delete Schedule',
+      'Are you sure you want to delete this schedule? All stops will also be deleted. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await deleteSchedule(id);
+            if (result.success) {
+              Alert.alert('Success', 'Schedule deleted successfully', [
+                { text: 'OK', onPress: () => router.back() }
+              ]);
+            } else {
+              Alert.alert('Error', 'Failed to delete schedule');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleViewStopDetails = (stop) => {
+    setSelectedStop(stop);
+    setShowStopDetailsModal(true);
   };
 
   const getFilteredStops = () => {
@@ -183,12 +275,31 @@ export default function ScheduleDetails() {
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: Spacing.xxl }}>
         {/* Schedule Info */}
         <View style={styles.scheduleInfo}>
-          <Text style={styles.scheduleDate}>{formatDate(schedule.date)}</Text>
-          <View style={styles.zoneAreaRow}>
-            <View style={styles.zoneBadge}>
-              <Text style={styles.zoneBadgeText}>Zone {schedule.zone}</Text>
+          <View style={styles.scheduleHeaderRow}>
+            <View style={styles.scheduleHeaderLeft}>
+              <Text style={styles.scheduleDate}>{formatDate(schedule.date)}</Text>
+              <View style={styles.zoneAreaRow}>
+                <View style={styles.zoneBadge}>
+                  <Text style={styles.zoneBadgeText}>Zone {schedule.zone}</Text>
+                </View>
+                <Text style={styles.areaText}>{schedule.area}</Text>
+              </View>
             </View>
-            <Text style={styles.areaText}>{schedule.area}</Text>
+            
+            <View style={styles.scheduleActions}>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={handleEditSchedule}
+              >
+                <Text style={styles.actionButtonText}>✏️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={handleDeleteSchedule}
+              >
+                <Text style={styles.actionButtonText}>🗑️</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.timeSection}>
@@ -273,13 +384,15 @@ export default function ScheduleDetails() {
             </View>
           ) : (
             filteredStops.map((stop, index) => (
-              <View
+              <TouchableOpacity
                 key={stop.id}
                 style={[
                   styles.stopCard,
                   stop.status === 'collected' && styles.stopCardCollected,
                   stop.status === 'skipped' && styles.stopCardSkipped,
                 ]}
+                onPress={() => handleViewStopDetails(stop)}
+                activeOpacity={0.7}
               >
                 <View style={styles.stopHeader}>
                   <View style={styles.stopHeaderLeft}>
@@ -313,6 +426,53 @@ export default function ScheduleDetails() {
 
                 <Text style={styles.stopAddress}>{stop.address}</Text>
 
+                {/* Show user info for customer stops */}
+                {stop.type === 'customer' && (
+                  <View style={styles.customerInfo}>
+                    {stop.userName && (
+                      <Text style={styles.customerText}>👤 {stop.userName}</Text>
+                    )}
+                    {stop.userEmail && (
+                      <Text style={styles.customerEmail}>📧 {stop.userEmail}</Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Show waste types and categories */}
+                {stop.wasteTypes && stop.wasteTypes.length > 0 && (
+                  <View style={styles.wasteTypesRow}>
+                    {stop.wasteTypes.map((type, idx) => (
+                      <View key={idx} style={styles.miniWasteTypeBadge}>
+                        <Text style={styles.miniWasteTypeText}>
+                          {wasteTypeIcons[type] || '🗑️'} {type}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Show bins information */}
+                {stop.bins && stop.bins.length > 0 && (
+                  <View style={styles.binsSection}>
+                    <Text style={styles.binsSectionTitle}>
+                      🗑️ Bins ({stop.bins.length})
+                    </Text>
+                    {stop.bins.map((bin, binIdx) => (
+                      <View key={binIdx} style={styles.binCard}>
+                        <View style={styles.binHeader}>
+                          <Text style={styles.binCode}>{bin.binCode}</Text>
+                          <View style={styles.binCategoryBadge}>
+                            <Text style={styles.binCategoryText}>
+                              {wasteTypeIcons[bin.wasteType] || '🗑️'} {bin.binCategory}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.binId}>ID: {bin.binId}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
                 {stop.notes && (
                   <Text style={styles.stopNotes}>📝 {stop.notes}</Text>
                 )}
@@ -339,11 +499,316 @@ export default function ScheduleDetails() {
                     </TouchableOpacity>
                   </View>
                 )}
-              </View>
+
+                {/* View Details Indicator */}
+                <View style={styles.viewDetailsIndicator}>
+                  <Text style={styles.viewDetailsText}>Tap to view details →</Text>
+                </View>
+              </TouchableOpacity>
             ))
           )}
         </View>
       </ScrollView>
+
+      {/* Edit Schedule Modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Schedule</Text>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Zone</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter zone (e.g., A, B, C)"
+                placeholderTextColor={Colors.text.secondary}
+                value={editingSchedule?.zone || ''}
+                onChangeText={(text) => setEditingSchedule({ ...editingSchedule, zone: text })}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Area</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter area name"
+                placeholderTextColor={Colors.text.secondary}
+                value={editingSchedule?.area || ''}
+                onChangeText={(text) => setEditingSchedule({ ...editingSchedule, area: text })}
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleSaveEdit}
+              >
+                <Text style={styles.confirmButtonText}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Stop Details Modal */}
+      <Modal
+        visible={showStopDetailsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowStopDetailsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.stopDetailsModal]}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Stop Details</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowStopDetailsModal(false)}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {selectedStop && (
+                <>
+                  {/* Stop Type and Status */}
+                  <View style={styles.detailSection}>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Type:</Text>
+                      <View
+                        style={[
+                          styles.stopTypeBadge,
+                          selectedStop.type === 'main'
+                            ? { backgroundColor: '#16A34A' }
+                            : { backgroundColor: '#2563EB' },
+                        ]}
+                      >
+                        <Text style={styles.stopTypeBadgeText}>
+                          {selectedStop.type === 'main' ? '📍 Main Stop' : '👤 Customer Stop'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Status:</Text>
+                      <View
+                        style={[
+                          styles.statusDetailBadge,
+                          selectedStop.status === 'collected' && { backgroundColor: '#16A34A' },
+                          selectedStop.status === 'pending' && { backgroundColor: '#F59E0B' },
+                          selectedStop.status === 'skipped' && { backgroundColor: '#DC2626' },
+                        ]}
+                      >
+                        <Text style={styles.statusDetailText}>
+                          {selectedStop.status === 'collected'
+                            ? '✅ Collected'
+                            : selectedStop.status === 'skipped'
+                            ? '⏭️ Skipped'
+                            : '⏳ Pending'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Address */}
+                  <View style={styles.detailSection}>
+                    <Text style={styles.sectionTitle}>📍 Address</Text>
+                    <Text style={styles.addressText}>
+                      {selectedStop.address || 'No address provided'}
+                    </Text>
+                  </View>
+
+                  {/* Zone */}
+                  {selectedStop.zone && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.sectionTitle}>🗺️ Zone</Text>
+                      <Text style={styles.detailValue}>Zone {selectedStop.zone}</Text>
+                    </View>
+                  )}
+
+                  {/* Customer Information */}
+                  {selectedStop.type === 'customer' && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.sectionTitle}>👤 Customer Information</Text>
+                      
+                      {selectedStop.userName && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Name:</Text>
+                          <Text style={styles.infoValue}>{selectedStop.userName}</Text>
+                        </View>
+                      )}
+                      
+                      {selectedStop.userEmail && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Email:</Text>
+                          <Text style={styles.infoValue}>{selectedStop.userEmail}</Text>
+                        </View>
+                      )}
+                      
+                      {selectedStop.userId && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>User ID:</Text>
+                          <Text style={[styles.infoValue, { fontFamily: 'monospace', fontSize: FontSizes.small }]}>
+                            {selectedStop.userId}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Waste Types */}
+                  {selectedStop.wasteTypes && selectedStop.wasteTypes.length > 0 && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.sectionTitle}>♻️ Waste Types</Text>
+                      <View style={styles.wasteTypesRow}>
+                        {selectedStop.wasteTypes.map((type, idx) => (
+                          <View key={idx} style={styles.detailWasteTypeBadge}>
+                            <Text style={styles.detailWasteTypeText}>
+                              {wasteTypeIcons[type] || '🗑️'} {type}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Categories */}
+                  {selectedStop.categories && selectedStop.categories.length > 0 && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.sectionTitle}>📦 Categories</Text>
+                      <View style={styles.wasteTypesRow}>
+                        {selectedStop.categories.map((category, idx) => (
+                          <View key={idx} style={styles.categoryBadge}>
+                            <Text style={styles.categoryText}>{category}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Bins */}
+                  {selectedStop.bins && selectedStop.bins.length > 0 && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.sectionTitle}>
+                        🗑️ Bins ({selectedStop.bins.length})
+                      </Text>
+                      {selectedStop.bins.map((bin, binIdx) => (
+                        <View key={binIdx} style={styles.detailBinCard}>
+                          <View style={styles.binDetailHeader}>
+                            <Text style={styles.binDetailCode}>{bin.binCode}</Text>
+                            <View style={styles.binDetailCategoryBadge}>
+                              <Text style={styles.binDetailCategoryText}>
+                                {wasteTypeIcons[bin.wasteType] || '🗑️'} {bin.binCategory}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.binInfoRow}>
+                            <Text style={styles.binInfoLabel}>Bin ID:</Text>
+                            <Text style={styles.binInfoValue}>{bin.binId}</Text>
+                          </View>
+                          <View style={styles.binInfoRow}>
+                            <Text style={styles.binInfoLabel}>Waste Type:</Text>
+                            <Text style={styles.binInfoValue}>{bin.wasteType}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Collection Time */}
+                  {selectedStop.collectedAt && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.sectionTitle}>⏰ Collection Time</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedStop.collectedAt.toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                      <Text style={styles.detailValue}>
+                        {selectedStop.collectedAt.toLocaleTimeString('en-US')}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Notes */}
+                  {selectedStop.notes && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.sectionTitle}>📝 Notes</Text>
+                      <Text style={styles.notesText}>{selectedStop.notes}</Text>
+                    </View>
+                  )}
+
+                  {/* Timestamps */}
+                  <View style={styles.detailSection}>
+                    <Text style={styles.sectionTitle}>🕐 Timestamps</Text>
+                    
+                    {selectedStop.createdAt && (
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Created:</Text>
+                        <Text style={styles.timestampValue}>
+                          {selectedStop.createdAt.toLocaleString('en-US')}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    {selectedStop.updatedAt && (
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Updated:</Text>
+                        <Text style={styles.timestampValue}>
+                          {selectedStop.updatedAt.toLocaleString('en-US')}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Actions */}
+                  {selectedStop.status === 'pending' && (
+                    <View style={styles.detailActionsSection}>
+                      <TouchableOpacity
+                        style={styles.detailCollectButton}
+                        onPress={() => {
+                          setShowStopDetailsModal(false);
+                          handleMarkCollected(selectedStop.id);
+                        }}
+                      >
+                        <Text style={styles.detailCollectButtonText}>
+                          ✅ Mark as Collected
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.detailSkipButton}
+                        onPress={() => {
+                          setShowStopDetailsModal(false);
+                          handleMarkSkipped(selectedStop.id);
+                        }}
+                      >
+                        <Text style={styles.detailSkipButtonText}>⏭️ Skip Stop</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -388,6 +853,38 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.card,
     borderBottomWidth: 1,
     borderBottomColor: Colors.line,
+  },
+  scheduleHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  scheduleHeaderLeft: {
+    flex: 1,
+  },
+  scheduleActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  editButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#DC2626',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    fontSize: 18,
   },
   scheduleDate: {
     fontSize: FontSizes.h1,
@@ -571,6 +1068,87 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: Spacing.sm,
   },
+  customerInfo: {
+    backgroundColor: '#EFF6FF',
+    padding: Spacing.sm,
+    borderRadius: Radii.small,
+    marginBottom: Spacing.sm,
+  },
+  customerText: {
+    fontSize: FontSizes.small,
+    color: '#1E40AF',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  customerEmail: {
+    fontSize: FontSizes.small,
+    color: '#1E40AF',
+  },
+  wasteTypesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  miniWasteTypeBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radii.chip,
+  },
+  miniWasteTypeText: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    fontWeight: '600',
+  },
+  binsSection: {
+    backgroundColor: '#F9FAFB',
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+    marginBottom: Spacing.sm,
+  },
+  binsSectionTitle: {
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  binCard: {
+    backgroundColor: '#fff',
+    padding: Spacing.sm,
+    borderRadius: Radii.small,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    marginBottom: Spacing.xs,
+  },
+  binHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  binCode: {
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    fontFamily: 'monospace',
+  },
+  binCategoryBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radii.chip,
+  },
+  binCategoryText: {
+    fontSize: FontSizes.small,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  binId: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    fontFamily: 'monospace',
+  },
   stopNotes: {
     fontSize: FontSizes.small,
     color: Colors.text.secondary,
@@ -608,6 +1186,286 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   skipButtonText: {
+    color: Colors.text.secondary,
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+  },
+  viewDetailsIndicator: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.line,
+    alignItems: 'center',
+  },
+  viewDetailsText: {
+    fontSize: FontSizes.small,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: Colors.bg.card,
+    borderRadius: Radii.card,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: FontSizes.h2,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  formGroup: {
+    marginBottom: Spacing.lg,
+  },
+  formLabel: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: Colors.line,
+    borderRadius: Radii.small,
+    padding: Spacing.md,
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    backgroundColor: Colors.bg.light,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: Radii.small,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: Colors.bg.light,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  confirmButton: {
+    backgroundColor: Colors.primary,
+  },
+  cancelButtonText: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  confirmButtonText: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  // Stop Details Modal styles
+  stopDetailsModal: {
+    maxHeight: '90%',
+    maxWidth: 500,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 20,
+    color: Colors.text.secondary,
+    fontWeight: '700',
+  },
+  detailSection: {
+    marginBottom: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.line,
+  },
+  sectionTitle: {
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  detailLabel: {
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+    color: Colors.text.secondary,
+  },
+  statusDetailBadge: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.chip,
+  },
+  statusDetailText: {
+    color: '#fff',
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+  },
+  addressText: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    lineHeight: 22,
+  },
+  detailValue: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    fontWeight: '600',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  infoLabel: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    fontWeight: '600',
+    flex: 1,
+  },
+  infoValue: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    flex: 2,
+    textAlign: 'right',
+  },
+  detailWasteTypeBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.chip,
+    marginRight: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  detailWasteTypeText: {
+    fontSize: FontSizes.body,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  categoryBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.chip,
+    marginRight: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  categoryText: {
+    fontSize: FontSizes.body,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  detailBinCard: {
+    backgroundColor: '#F9FAFB',
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    marginBottom: Spacing.sm,
+  },
+  binDetailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  binDetailCode: {
+    fontSize: FontSizes.h3,
+    fontWeight: '700',
+    color: Colors.text.primary,
+    fontFamily: 'monospace',
+  },
+  binDetailCategoryBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radii.chip,
+  },
+  binDetailCategoryText: {
+    fontSize: FontSizes.small,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  binInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  binInfoLabel: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+    fontWeight: '600',
+  },
+  binInfoValue: {
+    fontSize: FontSizes.small,
+    color: Colors.text.primary,
+    fontFamily: 'monospace',
+  },
+  notesText: {
+    fontSize: FontSizes.body,
+    color: Colors.text.primary,
+    lineHeight: 22,
+    backgroundColor: '#F9FAFB',
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+  },
+  timestampValue: {
+    fontSize: FontSizes.small,
+    color: Colors.text.secondary,
+  },
+  detailActionsSection: {
+    marginTop: Spacing.md,
+    gap: Spacing.md,
+  },
+  detailCollectButton: {
+    backgroundColor: '#16A34A',
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+    alignItems: 'center',
+  },
+  detailCollectButtonText: {
+    color: '#fff',
+    fontSize: FontSizes.body,
+    fontWeight: '700',
+  },
+  detailSkipButton: {
+    backgroundColor: '#F3F4F6',
+    padding: Spacing.md,
+    borderRadius: Radii.small,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  detailSkipButtonText: {
     color: Colors.text.secondary,
     fontSize: FontSizes.body,
     fontWeight: '600',
