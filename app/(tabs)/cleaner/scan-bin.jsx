@@ -1,14 +1,13 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { collection, collectionGroup, getDocs, query, updateDoc, where, doc } from 'firebase/firestore';
+import { collection, collectionGroup, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Modal, TextInput, ScrollView } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AppHeader from '../../../components/app-header';
 import { auth, db } from '../../../config/firebase';
 import { Colors, FontSizes, Radii, Spacing } from '../../../constants/customerTheme';
-import { collectionService } from '../../../services/collectionService';
 import { getBinById, updateBinStatus } from '../../../services/binService.optimized';
-import { updateStop } from '../../../services/stopsService';
+import { collectionService } from '../../../services/collectionService';
 
 export default function ScanBinScreen() {
   const router = useRouter();
@@ -335,7 +334,6 @@ export default function ScanBinScreen() {
   return (
     <View style={styles.container}>
       <AppHeader userName="Cleaner" userRole="cleaner" />
-      
       <View style={styles.content}>
         <Text style={styles.title}>Scan Bin QR Code 📱</Text>
         <Text style={styles.subtitle}>Scan any bin to mark it as collected</Text>
@@ -541,14 +539,8 @@ export default function ScanBinScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.bg.page,
-  },
-  content: {
-    flex: 1,
-    padding: Spacing.xl,
-  },
+  container: { flex: 1, backgroundColor: Colors.bg.page },
+  content: { flex: 1, padding: Spacing.lg },
   title: {
     fontSize: FontSizes.h2,
     fontWeight: '700',
@@ -561,12 +553,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.sm,
     marginBottom: Spacing.lg,
-  },
-  permissionText: {
-    fontSize: FontSizes.body,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    marginTop: Spacing.xl,
   },
   scannerContainer: {
     borderRadius: Radii.card,
