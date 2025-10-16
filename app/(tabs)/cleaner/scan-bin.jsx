@@ -25,6 +25,10 @@ export default function ScanBinScreen() {
     weight: '',
     notes: '',
   });
+  
+  // State for manual entry
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualBinId, setManualBinId] = useState('');
 
   useEffect(() => {
     if (!permission) {
@@ -96,6 +100,76 @@ export default function ScanBinScreen() {
     setBinDetails(null);
     setScannedBinId(null);
     setFormData({ weight: '', notes: '' });
+    setShowManualEntry(false);
+    setManualBinId('');
+  };
+
+  const handleManualEntry = async () => {
+    if (!manualBinId.trim()) {
+      Alert.alert('Error', 'Please enter a bin ID');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      console.log('🔍 Searching for bin with code/ID:', manualBinId.trim());
+      
+      // Try to search by binId field (e.g., BIN-1760878989284)
+      const binsQuery = query(
+        collection(db, 'bins'),
+        where('binId', '==', manualBinId.trim())
+      );
+      
+      const binsSnapshot = await getDocs(binsQuery);
+      
+      let bin = null;
+      
+      if (!binsSnapshot.empty) {
+        // Found by binId field
+        const binDoc = binsSnapshot.docs[0];
+        bin = { id: binDoc.id, ...binDoc.data() };
+        console.log('✅ Found bin by binId field');
+      } else {
+        // Try to get by document ID
+        try {
+          bin = await getBinById(manualBinId.trim());
+          if (bin) {
+            console.log('✅ Found bin by document ID');
+          }
+        } catch (error) {
+          console.log('Not found by document ID');
+        }
+      }
+      
+      if (!bin) {
+        Alert.alert(
+          'Bin Not Found',
+          `Could not find bin with ID: ${manualBinId}.\n\nPlease check the bin code and try again.`,
+          [{ text: 'OK' }]
+        );
+        setProcessing(false);
+        return;
+      }
+
+      console.log('✅ Loaded bin details:', bin);
+      
+      // Store bin details and show form
+      setBinDetails(bin);
+      setScannedBinId(bin.id); // Use document ID
+      setShowManualEntry(false);
+      setShowForm(true);
+
+    } catch (error) {
+      console.error('❌ Error fetching bin:', error);
+      Alert.alert(
+        'Error',
+        `Failed to load bin details: ${error.message}`,
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleConfirmCollection = async () => {
@@ -302,6 +376,13 @@ export default function ScanBinScreen() {
         </View>
 
         <TouchableOpacity 
+          style={styles.manualEntryBtn}
+          onPress={() => setShowManualEntry(true)}
+        >
+          <Text style={styles.manualEntryBtnText}>📝 Enter Bin ID Manually</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
           style={styles.backBtn}
           onPress={() => router.back()}
         >
@@ -399,6 +480,62 @@ export default function ScanBinScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Manual Entry Modal */}
+      <Modal
+        visible={showManualEntry}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowManualEntry(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Enter Bin ID</Text>
+            
+            <Text style={styles.manualEntryInstructions}>
+              Enter the bin code (e.g., BIN-1760878989284) to fetch bin details and proceed with collection.
+            </Text>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Bin ID / Code</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g., BIN-1760878989284"
+                placeholderTextColor={Colors.text.secondary}
+                value={manualBinId}
+                onChangeText={setManualBinId}
+                autoCapitalize="characters"
+                autoFocus={true}
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setShowManualEntry(false);
+                  setManualBinId('');
+                }}
+                disabled={processing}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={handleManualEntry}
+                disabled={processing || !manualBinId.trim()}
+              >
+                {processing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.modalButtonTextConfirm}>Fetch Bin</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -470,6 +607,18 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     lineHeight: 20,
   },
+  manualEntryBtn: {
+    backgroundColor: Colors.brand.teal,
+    paddingVertical: Spacing.md,
+    borderRadius: Radii.btn,
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  manualEntryBtnText: {
+    color: Colors.text.white,
+    fontSize: FontSizes.body,
+    fontWeight: '600',
+  },
   manualBtn: {
     backgroundColor: Colors.bg.card,
     borderWidth: 1,
@@ -528,6 +677,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text.primary,
     marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  manualEntryInstructions: {
+    fontSize: FontSizes.body,
+    color: Colors.text.secondary,
+    marginBottom: Spacing.lg,
+    lineHeight: 20,
     textAlign: 'center',
   },
   binInfo: {
